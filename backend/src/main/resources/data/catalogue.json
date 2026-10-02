@@ -1,0 +1,1840 @@
+[
+ {
+  "id": "intro-to-client-contexts-tpximpact-delivery-models-and-minds",
+  "title": "Intro to client contexts, TPXimpact delivery models and mindsets",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Client Relationships",
+  "url": null,
+  "description": "How our clients work, how we deliver with them and the mindsets that make a great TPXimpact consultant. The starting point for everyone on the programme.",
+  "tags": [
+   "consulting",
+   "trust",
+   "stakeholders",
+   "delivery",
+   "client"
+  ],
+  "level": "Foundation",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "understanding-client-needs",
+  "title": "Understanding client needs",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Client Relationships",
+  "url": null,
+  "description": "Listen for what clients need rather than what they ask for. Covers discovery conversations, questioning techniques and playing back understanding.",
+  "tags": [
+   "client",
+   "stakeholders",
+   "research",
+   "requirements",
+   "communication"
+  ],
+  "level": "Foundation",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "building-trust-and-the-art-of-challenge",
+  "title": "Building trust and the art of challenge",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Client Relationships",
+  "url": null,
+  "description": "Become a critical friend: build credibility, then use it to challenge constructively without damaging the relationship.",
+  "tags": [
+   "trust",
+   "influence",
+   "feedback",
+   "client",
+   "stakeholders"
+  ],
+  "level": "Intermediate",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "navigating-conflict",
+  "title": "Navigating conflict",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Client Relationships",
+  "url": null,
+  "description": "Practical tools for difficult conversations, disagreement and tension within teams and with clients.",
+  "tags": [
+   "conflict",
+   "feedback",
+   "communication",
+   "teams",
+   "resilience"
+  ],
+  "level": "Intermediate",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "systemic-leadership",
+  "title": "Systemic leadership",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Client Relationships",
+  "url": null,
+  "description": "Lead across organisational boundaries, see the whole system and shape change with multiple stakeholders.",
+  "tags": [
+   "leadership",
+   "systems-thinking",
+   "strategy",
+   "influence"
+  ],
+  "level": "Advanced",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "operating-effectively-in-client-settings",
+  "title": "Operating effectively in client settings",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Collaborative Working",
+  "url": null,
+  "description": "Show up well on client sites and in multidisciplinary teams: ways of working, etiquette, managing your time and visibility.",
+  "tags": [
+   "collaboration",
+   "client",
+   "ownership",
+   "time-management",
+   "presenting"
+  ],
+  "level": "Foundation",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "communication-and-storytelling",
+  "title": "Communication and storytelling",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Collaborative Working",
+  "url": null,
+  "description": "Structure your message, tailor it to your audience and tell the story of your work so it lands with clients and colleagues.",
+  "tags": [
+   "communication",
+   "storytelling",
+   "presenting",
+   "writing"
+  ],
+  "level": "Foundation",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "structured-problem-solving",
+  "title": "Structured problem solving",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Collaborative Working",
+  "url": null,
+  "description": "Break down ambiguous problems, form hypotheses, weigh options and make a clear recommendation with incomplete information.",
+  "tags": [
+   "problem-solving",
+   "ambiguity",
+   "analysis",
+   "strategy"
+  ],
+  "level": "Intermediate",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "workshop-design-and-facilitation",
+  "title": "Workshop design and facilitation",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Collaborative Working",
+  "url": null,
+  "description": "Design and run workshops that get to outcomes, in person and remote. Includes agendas, activities and handling tricky dynamics.",
+  "tags": [
+   "facilitation",
+   "workshops",
+   "collaboration",
+   "communication"
+  ],
+  "level": "Intermediate",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "executive-influence",
+  "title": "Executive influence",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Collaborative Working",
+  "url": null,
+  "description": "Engage senior stakeholders, frame work around outcomes they care about and influence decisions.",
+  "tags": [
+   "influence",
+   "stakeholders",
+   "presenting",
+   "leadership",
+   "storytelling"
+  ],
+  "level": "Advanced",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "strategic-negotiation",
+  "title": "Strategic negotiation",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Commercial Stewardship",
+  "url": null,
+  "description": "Prepare for and conduct negotiations on scope, price and change, creating value for both sides.",
+  "tags": [
+   "negotiation",
+   "commercial",
+   "influence"
+  ],
+  "level": "Advanced",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "ambassador-mindsets-and-the-value-loop",
+  "title": "Ambassador mindsets and the value loop",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Commercial Stewardship",
+  "url": null,
+  "description": "How everyone contributes to growth: noticing opportunities, sharing our work and representing TPXimpact.",
+  "tags": [
+   "growth",
+   "commercial",
+   "storytelling",
+   "sharing"
+  ],
+  "level": "Foundation",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "spotting-and-shaping-new-opportunities",
+  "title": "Spotting and shaping new opportunities",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Commercial Stewardship",
+  "url": null,
+  "description": "Turn client conversations into well-shaped opportunities and contribute to bids, proposals and pitches.",
+  "tags": [
+   "growth",
+   "bids",
+   "commercial",
+   "client"
+  ],
+  "level": "Intermediate",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "anticipating-problems-and-managing-risks",
+  "title": "Anticipating problems and managing risks",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Commercial Stewardship",
+  "url": null,
+  "description": "Spot delivery and commercial risk early, escalate well and put mitigations in place.",
+  "tags": [
+   "risk",
+   "delivery",
+   "ownership",
+   "problem-solving"
+  ],
+  "level": "Intermediate",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "commercial-acumen-and-trade-offs",
+  "title": "Commercial acumen and trade-offs",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Commercial Stewardship",
+  "url": null,
+  "description": "Understand how our projects make money, read a project's financial health and make sensible trade-offs.",
+  "tags": [
+   "commercial",
+   "finance",
+   "time-management",
+   "planning"
+  ],
+  "level": "Intermediate",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "strategic-planning-and-roadmaps",
+  "title": "Strategic planning and roadmaps",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Commercial Stewardship",
+  "url": null,
+  "description": "Build roadmaps that connect delivery to outcomes and help clients plan for the long term.",
+  "tags": [
+   "strategy",
+   "planning",
+   "outcomes",
+   "product"
+  ],
+  "level": "Advanced",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "building-resilience",
+  "title": "Building resilience",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Foundation",
+  "url": null,
+  "description": "Look after yourself in demanding client environments: energy, boundaries and bouncing back from setbacks.",
+  "tags": [
+   "resilience",
+   "wellbeing",
+   "time-management"
+  ],
+  "level": "Foundation",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "coaching-skills-for-consultants",
+  "title": "Coaching skills for consultants",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Talent & Development - Consulting Skills: Foundation",
+  "url": null,
+  "description": "Use coaching conversations to develop colleagues and client teams. Covers questioning, listening and GROW.",
+  "tags": [
+   "coaching",
+   "mentoring",
+   "feedback",
+   "capability-building"
+  ],
+  "level": "Intermediate",
+  "duration": "Half-day workshop + practice",
+  "cost": "Internal",
+  "format": "Workshop, peer learning and live project application"
+ },
+ {
+  "id": "communities-of-practice",
+  "title": "Communities of Practice",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact",
+  "url": null,
+  "description": "Join your practice's Community of Practice to share work in the open, learn from peers and contribute to playbooks.",
+  "tags": [
+   "sharing",
+   "learning",
+   "capability-building",
+   "collaboration",
+   "practice"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Internal",
+  "format": "Community"
+ },
+ {
+  "id": "run-a-lunch-and-learn",
+  "title": "Run a lunch and learn",
+  "type": "EVENT",
+  "provider": "TPXimpact",
+  "url": null,
+  "description": "Share something you've learned or built in a 30-minute internal session. Great evidence for 'Practice area' and 'Developing your craft'.",
+  "tags": [
+   "sharing",
+   "presenting",
+   "capability-building",
+   "storytelling",
+   "practice"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Internal",
+  "format": "Internal talk"
+ },
+ {
+  "id": "bid-and-proposal-shadowing",
+  "title": "Bid and proposal shadowing",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact Growth team",
+  "url": null,
+  "description": "Pair with the Growth team on a live bid: write a section, review a response or join a pitch rehearsal.",
+  "tags": [
+   "bids",
+   "growth",
+   "writing",
+   "commercial"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Internal",
+  "format": "On the job"
+ },
+ {
+  "id": "mentoring-scheme",
+  "title": "Mentoring scheme",
+  "type": "PROGRAMME",
+  "provider": "TPXimpact",
+  "url": null,
+  "description": "Be matched with a mentor from another practice, or become a mentor yourself.",
+  "tags": [
+   "mentoring",
+   "coaching",
+   "learning",
+   "capability-building",
+   "feedback"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Internal",
+  "format": "1-to-1"
+ },
+ {
+  "id": "gov-uk-service-manual",
+  "title": "GOV.UK Service Manual",
+  "type": "ARTICLE",
+  "provider": "Government Digital Service",
+  "url": "https://www.gov.uk/service-manual",
+  "description": "Guidance on designing, building and running public services, from discovery to live. The reference for how government delivers digital work.",
+  "tags": [
+   "delivery",
+   "lifecycle",
+   "agile",
+   "service-design",
+   "product",
+   "research",
+   "public-sector"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "agile-delivery-in-government",
+  "title": "Agile delivery in government",
+  "type": "ARTICLE",
+  "provider": "Government Digital Service",
+  "url": "https://www.gov.uk/service-manual/agile-delivery",
+  "description": "How agile works in the public sector: phases, team roles, governance and ceremonies.",
+  "tags": [
+   "agile",
+   "delivery",
+   "lifecycle",
+   "teams",
+   "public-sector"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "the-service-standard",
+  "title": "The Service Standard",
+  "type": "ARTICLE",
+  "provider": "Government Digital Service",
+  "url": "https://www.gov.uk/service-manual/service-standard",
+  "description": "The 14 points government services are assessed against. Useful for anyone preparing a team for a service assessment.",
+  "tags": [
+   "lifecycle",
+   "service-design",
+   "product",
+   "outcomes",
+   "public-sector",
+   "assurance"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "gov-uk-design-system",
+  "title": "GOV.UK Design System",
+  "type": "ARTICLE",
+  "provider": "Government Digital Service",
+  "url": "https://design-system.service.gov.uk/",
+  "description": "Styles, components and patterns for building accessible government services, with research behind each one.",
+  "tags": [
+   "interaction-design",
+   "accessibility",
+   "content-design",
+   "frontend",
+   "patterns"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "writing-to-gov-uk-standards",
+  "title": "Writing to GOV.UK standards",
+  "type": "ARTICLE",
+  "provider": "GOV.UK Publishing",
+  "url": "https://guidance.publishing.service.gov.uk/writing-to-gov-uk-standards/",
+  "description": "GOV.UK's guidance on user needs, plain English and writing for the web.",
+  "tags": [
+   "content-design",
+   "writing",
+   "accessibility",
+   "communication"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "web-content-accessibility-guidelines-wcag",
+  "title": "Web Content Accessibility Guidelines (WCAG)",
+  "type": "ARTICLE",
+  "provider": "W3C Web Accessibility Initiative",
+  "url": "https://www.w3.org/WAI/standards-guidelines/wcag/",
+  "description": "The international standard for accessible digital content, with quick references and techniques.",
+  "tags": [
+   "accessibility",
+   "inclusion",
+   "interaction-design",
+   "content-design",
+   "testing",
+   "frontend"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "digital-accessibility-foundations",
+  "title": "Digital Accessibility Foundations",
+  "type": "COURSE",
+  "provider": "W3C Web Accessibility Initiative",
+  "url": "https://www.w3.org/WAI/courses/foundations-course/",
+  "description": "Free self-paced course on the principles of accessibility, how people with disabilities use the web and how to start applying standards.",
+  "tags": [
+   "accessibility",
+   "inclusion",
+   "interaction-design",
+   "content-design",
+   "research"
+  ],
+  "level": "Foundation",
+  "duration": "~15 hours",
+  "cost": "Free",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "the-green-book-appraisal-and-evaluation",
+  "title": "The Green Book: appraisal and evaluation",
+  "type": "ARTICLE",
+  "provider": "HM Treasury",
+  "url": "https://www.gov.uk/government/publications/the-green-book-appraisal-and-evaluation-in-central-government",
+  "description": "How government appraises options and builds business cases. Essential for benefits cases and option analysis.",
+  "tags": [
+   "benefits",
+   "outcomes",
+   "business-analysis",
+   "finance",
+   "options",
+   "public-sector",
+   "impact"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "the-magenta-book-guidance-for-evaluation",
+  "title": "The Magenta Book: guidance for evaluation",
+  "type": "ARTICLE",
+  "provider": "HM Treasury",
+  "url": "https://www.gov.uk/government/publications/the-magenta-book",
+  "description": "Government guidance on designing and running evaluations - theory of change, methods and measuring impact.",
+  "tags": [
+   "impact",
+   "research",
+   "outcomes",
+   "benefits",
+   "analytics",
+   "public-sector"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "the-technology-code-of-practice",
+  "title": "The Technology Code of Practice",
+  "type": "ARTICLE",
+  "provider": "Central Digital and Data Office",
+  "url": "https://www.gov.uk/guidance/the-technology-code-of-practice",
+  "description": "Criteria for designing, building and buying technology in government: open standards, cloud first, security and more.",
+  "tags": [
+   "architecture",
+   "cloud",
+   "security",
+   "strategy",
+   "public-sector"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "government-digital-and-data-profession-capability-framework",
+  "title": "Government Digital and Data Profession Capability Framework",
+  "type": "ARTICLE",
+  "provider": "Central Digital and Data Office",
+  "url": "https://ddat-capability-framework.service.gov.uk/",
+  "description": "Roles and skill levels across digital, data and technology. Handy to compare against our own framework and client expectations.",
+  "tags": [
+   "learning",
+   "capability-building",
+   "public-sector",
+   "career"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "the-government-data-quality-framework",
+  "title": "The Government Data Quality Framework",
+  "type": "ARTICLE",
+  "provider": "Government Data Quality Hub",
+  "url": "https://www.gov.uk/government/publications/the-government-data-quality-framework",
+  "description": "Principles and practical tools for assessing and improving data quality.",
+  "tags": [
+   "data",
+   "data-governance",
+   "data-engineering",
+   "analytics",
+   "public-sector"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "the-scrum-guide",
+  "title": "The Scrum Guide",
+  "type": "ARTICLE",
+  "provider": "Scrum.org / Scrum Inc.",
+  "url": "https://scrumguides.org/scrum-guide.html",
+  "description": "The definitive short guide to Scrum's roles, events and artefacts. Twenty minutes well spent.",
+  "tags": [
+   "agile",
+   "delivery",
+   "teams",
+   "product"
+  ],
+  "level": "Foundation",
+  "duration": "20 minutes",
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "atlassian-team-playbook",
+  "title": "Atlassian Team Playbook",
+  "type": "ARTICLE",
+  "provider": "Atlassian",
+  "url": "https://www.atlassian.com/team-playbook",
+  "description": "Free, step-by-step 'plays' for retrospectives, health monitors, roles and responsibilities and more.",
+  "tags": [
+   "facilitation",
+   "workshops",
+   "teams",
+   "agile",
+   "collaboration",
+   "wellbeing"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "mind-the-product",
+  "title": "Mind the Product",
+  "type": "ARTICLE",
+  "provider": "Mind the Product",
+  "url": "https://www.mindtheproduct.com/",
+  "description": "Articles, talks and events on product management, roadmaps, discovery and outcomes.",
+  "tags": [
+   "product",
+   "strategy",
+   "outcomes",
+   "roadmaps",
+   "benefits"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "business-analysis-courses",
+  "title": "Business analysis courses",
+  "type": "COURSE",
+  "provider": "Coursera",
+  "url": "https://www.coursera.org/search?query=business+analysis",
+  "description": "A range of courses on requirements, process modelling and business analysis techniques.",
+  "tags": [
+   "business-analysis",
+   "requirements",
+   "modelling",
+   "process"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free to audit / Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "iiba-business-analysis-body-of-knowledge-and-certification",
+  "title": "IIBA - business analysis body of knowledge and certification",
+  "type": "PROGRAMME",
+  "provider": "International Institute of Business Analysis",
+  "url": "https://www.iiba.org/",
+  "description": "Home of the BABOK Guide and ECBA/CCBA/CBAP certifications.",
+  "tags": [
+   "business-analysis",
+   "requirements",
+   "modelling",
+   "process"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Paid",
+  "format": null
+ },
+ {
+  "id": "process-improvement-with-lean",
+  "title": "Process improvement with Lean",
+  "type": "COURSE",
+  "provider": "LinkedIn Learning",
+  "url": "https://www.linkedin.com/learning/search?keywords=lean+process+improvement",
+  "description": "Short courses on value stream mapping, waste and continuous improvement.",
+  "tags": [
+   "process",
+   "agile",
+   "continuous-improvement",
+   "modelling"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "project-and-financial-management-courses",
+  "title": "Project and financial management courses",
+  "type": "COURSE",
+  "provider": "LinkedIn Learning",
+  "url": "https://www.linkedin.com/learning/search?keywords=project+finance+budgeting",
+  "description": "Budgeting, forecasting and managing project finances.",
+  "tags": [
+   "finance",
+   "commercial",
+   "delivery",
+   "planning"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "nielsen-norman-group-articles",
+  "title": "Nielsen Norman Group articles",
+  "type": "ARTICLE",
+  "provider": "Nielsen Norman Group",
+  "url": "https://www.nngroup.com/articles/",
+  "description": "Evidence-based articles on UX research methods, interaction design and usability.",
+  "tags": [
+   "research",
+   "interaction-design",
+   "service-design",
+   "usability",
+   "content-design"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "design-council-resources",
+  "title": "Design Council resources",
+  "type": "ARTICLE",
+  "provider": "Design Council",
+  "url": "https://www.designcouncil.org.uk/",
+  "description": "Home of the Double Diamond and the Systemic Design Framework - useful for design strategy and systems change.",
+  "tags": [
+   "service-design",
+   "design-strategy",
+   "systems-thinking",
+   "org-design"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "service-design-courses",
+  "title": "Service design courses",
+  "type": "COURSE",
+  "provider": "LinkedIn Learning",
+  "url": "https://www.linkedin.com/learning/search?keywords=service+design",
+  "description": "Service blueprints, journey mapping and designing end-to-end services.",
+  "tags": [
+   "service-design",
+   "research",
+   "org-design"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "just-enough-research-erika-hall",
+  "title": "Just Enough Research - Erika Hall",
+  "type": "BOOK",
+  "provider": "A Book Apart",
+  "url": "https://openlibrary.org/search?q=Just+Enough+Research+Erika+Hall",
+  "description": "A short, practical book on planning and running research that answers the questions that matter.",
+  "tags": [
+   "research",
+   "service-design",
+   "product"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "content-design-sarah-winters",
+  "title": "Content Design - Sarah Winters",
+  "type": "BOOK",
+  "provider": "Content Design London",
+  "url": "https://openlibrary.org/search?q=Content+Design+Sarah+Winters",
+  "description": "The book on content design from one of the people who shaped GOV.UK.",
+  "tags": [
+   "content-design",
+   "writing",
+   "accessibility"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "org-design-for-design-orgs-peter-merholz-kristin-skinner",
+  "title": "Org Design for Design Orgs - Peter Merholz & Kristin Skinner",
+  "type": "BOOK",
+  "provider": "O'Reilly",
+  "url": "https://openlibrary.org/search?q=Org+Design+for+Design+Orgs",
+  "description": "How to build and lead design teams inside organisations.",
+  "tags": [
+   "org-design",
+   "design-strategy",
+   "leadership",
+   "capability-building"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "aws-skill-builder",
+  "title": "AWS Skill Builder",
+  "type": "COURSE",
+  "provider": "Amazon Web Services",
+  "url": "https://skillbuilder.aws/",
+  "description": "Free and paid AWS training from cloud essentials to specialty certifications.",
+  "tags": [
+   "cloud",
+   "infrastructure",
+   "architecture",
+   "devops",
+   "security"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "microsoft-learn-training",
+  "title": "Microsoft Learn training",
+  "type": "COURSE",
+  "provider": "Microsoft",
+  "url": "https://learn.microsoft.com/en-us/training/",
+  "description": "Free learning paths for Azure, Power Platform, Dynamics 365 and more.",
+  "tags": [
+   "cloud",
+   "infrastructure",
+   "business-applications",
+   "data",
+   "devops"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "google-cloud-skills-boost",
+  "title": "Google Cloud Skills Boost",
+  "type": "COURSE",
+  "provider": "Google Cloud",
+  "url": "https://www.cloudskillsboost.google/",
+  "description": "Hands-on labs and courses for Google Cloud, data and machine learning.",
+  "tags": [
+   "cloud",
+   "data",
+   "ai",
+   "infrastructure"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Hands-on labs"
+ },
+ {
+  "id": "terraform-tutorials",
+  "title": "Terraform tutorials",
+  "type": "COURSE",
+  "provider": "HashiCorp",
+  "url": "https://developer.hashicorp.com/terraform/tutorials",
+  "description": "Learn infrastructure as code with Terraform across AWS, Azure and GCP.",
+  "tags": [
+   "infrastructure",
+   "cloud",
+   "devops",
+   "automation"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": "Hands-on tutorials"
+ },
+ {
+  "id": "kubernetes-tutorials",
+  "title": "Kubernetes tutorials",
+  "type": "COURSE",
+  "provider": "Kubernetes",
+  "url": "https://kubernetes.io/docs/tutorials/",
+  "description": "The official hands-on introduction to deploying and scaling containerised apps.",
+  "tags": [
+   "cloud",
+   "devops",
+   "infrastructure",
+   "containers"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "owasp-top-10",
+  "title": "OWASP Top 10",
+  "type": "ARTICLE",
+  "provider": "OWASP Foundation",
+  "url": "https://owasp.org/www-project-top-ten/",
+  "description": "The most critical web application security risks and how to prevent them.",
+  "tags": [
+   "security",
+   "software-engineering",
+   "testing",
+   "architecture"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "ncsc-guidance",
+  "title": "NCSC guidance",
+  "type": "ARTICLE",
+  "provider": "National Cyber Security Centre",
+  "url": "https://www.ncsc.gov.uk/",
+  "description": "UK guidance on cloud security, secure development and cyber resilience.",
+  "tags": [
+   "security",
+   "cloud",
+   "architecture",
+   "public-sector"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "martin-fowler-s-articles",
+  "title": "Martin Fowler's articles",
+  "type": "ARTICLE",
+  "provider": "martinfowler.com",
+  "url": "https://martinfowler.com/",
+  "description": "Long-standing writing on software architecture, refactoring, microservices and delivery.",
+  "tags": [
+   "software-engineering",
+   "architecture",
+   "coding",
+   "devops"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "the-twelve-factor-app",
+  "title": "The Twelve-Factor App",
+  "type": "ARTICLE",
+  "provider": "12factor.net",
+  "url": "https://12factor.net/",
+  "description": "A short methodology for building modern, deployable, scalable services.",
+  "tags": [
+   "software-engineering",
+   "cloud",
+   "architecture",
+   "devops"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "roadmap-sh",
+  "title": "roadmap.sh",
+  "type": "ARTICLE",
+  "provider": "roadmap.sh",
+  "url": "https://roadmap.sh/",
+  "description": "Community learning roadmaps for backend, frontend, DevOps, QA, data and more.",
+  "tags": [
+   "software-engineering",
+   "coding",
+   "devops",
+   "testing",
+   "data",
+   "learning"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "mdn-learn-web-development",
+  "title": "MDN: Learn web development",
+  "type": "COURSE",
+  "provider": "Mozilla",
+  "url": "https://developer.mozilla.org/en-US/docs/Learn",
+  "description": "Free structured curriculum for HTML, CSS, JavaScript and accessibility.",
+  "tags": [
+   "coding",
+   "frontend",
+   "accessibility",
+   "software-engineering"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "test-automation-university",
+  "title": "Test Automation University",
+  "type": "COURSE",
+  "provider": "Applitools",
+  "url": "https://testautomationu.applitools.com/",
+  "description": "Free courses on test automation frameworks, API testing and CI.",
+  "tags": [
+   "testing",
+   "automation",
+   "software-engineering",
+   "coding"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "ministry-of-testing",
+  "title": "Ministry of Testing",
+  "type": "PROGRAMME",
+  "provider": "Ministry of Testing",
+  "url": "https://www.ministryoftesting.com/",
+  "description": "Community, courses and events for software testers.",
+  "tags": [
+   "testing",
+   "automation",
+   "learning"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Community"
+ },
+ {
+  "id": "kaggle-learn",
+  "title": "Kaggle Learn",
+  "type": "COURSE",
+  "provider": "Kaggle",
+  "url": "https://www.kaggle.com/learn",
+  "description": "Free, short, hands-on courses in Python, SQL, data visualisation and machine learning.",
+  "tags": [
+   "data",
+   "analytics",
+   "ai",
+   "coding",
+   "data-engineering"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": "Hands-on notebooks"
+ },
+ {
+  "id": "dama-data-management-body-of-knowledge",
+  "title": "DAMA Data Management Body of Knowledge",
+  "type": "BOOK",
+  "provider": "DAMA International",
+  "url": "https://www.dama.org/cpages/body-of-knowledge",
+  "description": "The reference for data governance, architecture, quality and metadata management.",
+  "tags": [
+   "data-governance",
+   "data",
+   "architecture",
+   "data-engineering"
+  ],
+  "level": "Advanced",
+  "duration": null,
+  "cost": "Paid",
+  "format": null
+ },
+ {
+  "id": "designing-data-intensive-applications-martin-kleppmann",
+  "title": "Designing Data-Intensive Applications - Martin Kleppmann",
+  "type": "BOOK",
+  "provider": "O'Reilly",
+  "url": "https://openlibrary.org/search?q=Designing+Data-Intensive+Applications",
+  "description": "How databases, streams and distributed systems really work. A must for data engineers and architects.",
+  "tags": [
+   "data-engineering",
+   "architecture",
+   "software-engineering",
+   "data"
+  ],
+  "level": "Advanced",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "storytelling-with-data-cole-nussbaumer-knaflic",
+  "title": "Storytelling with Data - Cole Nussbaumer Knaflic",
+  "type": "BOOK",
+  "provider": "Wiley",
+  "url": "https://openlibrary.org/search?q=Storytelling+with+Data+Knaflic",
+  "description": "Turn analysis into clear charts and narratives that drive decisions.",
+  "tags": [
+   "analytics",
+   "storytelling",
+   "data",
+   "communication",
+   "presenting"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "itil-4-foundation",
+  "title": "ITIL 4 Foundation",
+  "type": "PROGRAMME",
+  "provider": "PeopleCert",
+  "url": "https://www.peoplecert.org/",
+  "description": "The standard framework for IT service management: incident, problem, change and continual improvement.",
+  "tags": [
+   "service-management",
+   "support",
+   "continuous-improvement",
+   "process"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Paid",
+  "format": "Certification"
+ },
+ {
+  "id": "accelerate-forsgren-humble-kim",
+  "title": "Accelerate - Forsgren, Humble & Kim",
+  "type": "BOOK",
+  "provider": "IT Revolution",
+  "url": "https://openlibrary.org/search?q=Accelerate+Forsgren+Humble+Kim",
+  "description": "The research behind high-performing technology teams and the four key delivery metrics.",
+  "tags": [
+   "devops",
+   "delivery",
+   "software-engineering",
+   "leadership",
+   "outcomes"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "team-topologies-skelton-pais",
+  "title": "Team Topologies - Skelton & Pais",
+  "type": "BOOK",
+  "provider": "IT Revolution",
+  "url": "https://openlibrary.org/search?q=Team+Topologies+Skelton+Pais",
+  "description": "How to organise technology teams for fast flow.",
+  "tags": [
+   "org-design",
+   "teams",
+   "architecture",
+   "leadership"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "generative-ai-courses",
+  "title": "Generative AI courses",
+  "type": "COURSE",
+  "provider": "Coursera",
+  "url": "https://www.coursera.org/search?query=generative+AI",
+  "description": "Introductions to generative AI, prompt design and responsible AI.",
+  "tags": [
+   "ai",
+   "emerging-tech",
+   "data"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free to audit / Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "the-trusted-advisor-maister-green-galford",
+  "title": "The Trusted Advisor - Maister, Green & Galford",
+  "type": "BOOK",
+  "provider": "Maister, Green & Galford",
+  "url": "https://openlibrary.org/search?q=The+Trusted+Advisor",
+  "description": "Building client trust through credibility, reliability, intimacy and low self-orientation.",
+  "tags": [
+   "trust",
+   "client",
+   "consulting",
+   "stakeholders",
+   "influence"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "the-pyramid-principle-barbara-minto",
+  "title": "The Pyramid Principle - Barbara Minto",
+  "type": "BOOK",
+  "provider": "Barbara Minto",
+  "url": "https://openlibrary.org/search?q=The+Pyramid+Principle",
+  "description": "Structure your thinking and writing so the answer comes first. The classic for consultants.",
+  "tags": [
+   "communication",
+   "writing",
+   "problem-solving",
+   "storytelling",
+   "presenting"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "flawless-consulting-peter-block",
+  "title": "Flawless Consulting - Peter Block",
+  "type": "BOOK",
+  "provider": "Peter Block",
+  "url": "https://openlibrary.org/search?q=Flawless+Consulting",
+  "description": "How to contract, diagnose and implement with clients - the human side of consulting.",
+  "tags": [
+   "consulting",
+   "client",
+   "trust",
+   "influence"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "crucial-conversations-patterson-grenny-mcmillan-switzler",
+  "title": "Crucial Conversations - Patterson, Grenny, McMillan & Switzler",
+  "type": "BOOK",
+  "provider": "Patterson, Grenny, McMillan & Switzler",
+  "url": "https://openlibrary.org/search?q=Crucial+Conversations",
+  "description": "Tools for talking when stakes are high, opinions vary and emotions run strong.",
+  "tags": [
+   "conflict",
+   "feedback",
+   "communication",
+   "stakeholders"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "radical-candor-kim-scott",
+  "title": "Radical Candor - Kim Scott",
+  "type": "BOOK",
+  "provider": "Kim Scott",
+  "url": "https://openlibrary.org/search?q=Radical+Candor",
+  "description": "Care personally and challenge directly: a framework for feedback that helps people grow.",
+  "tags": [
+   "feedback",
+   "leadership",
+   "mentoring",
+   "teams"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "the-coaching-habit-michael-bungay-stanier",
+  "title": "The Coaching Habit - Michael Bungay Stanier",
+  "type": "BOOK",
+  "provider": "Michael Bungay Stanier",
+  "url": "https://openlibrary.org/search?q=The+Coaching+Habit",
+  "description": "Seven questions that make everyday conversations more coaching-led.",
+  "tags": [
+   "coaching",
+   "mentoring",
+   "leadership",
+   "feedback",
+   "capability-building"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "thinking-in-systems-donella-meadows",
+  "title": "Thinking in Systems - Donella Meadows",
+  "type": "BOOK",
+  "provider": "Donella Meadows",
+  "url": "https://openlibrary.org/search?q=Thinking+in+Systems",
+  "description": "An accessible introduction to systems thinking, feedback loops and leverage points.",
+  "tags": [
+   "systems-thinking",
+   "strategy",
+   "ambiguity",
+   "problem-solving"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "good-strategy-bad-strategy-richard-rumelt",
+  "title": "Good Strategy Bad Strategy - Richard Rumelt",
+  "type": "BOOK",
+  "provider": "Richard Rumelt",
+  "url": "https://openlibrary.org/search?q=Good+Strategy+Bad+Strategy",
+  "description": "What good strategy looks like: diagnosis, guiding policy and coherent action.",
+  "tags": [
+   "strategy",
+   "planning",
+   "leadership",
+   "problem-solving"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "never-split-the-difference-chris-voss",
+  "title": "Never Split the Difference - Chris Voss",
+  "type": "BOOK",
+  "provider": "Chris Voss",
+  "url": "https://openlibrary.org/search?q=Never+Split+the+Difference",
+  "description": "Negotiation techniques built on tactical empathy and listening.",
+  "tags": [
+   "negotiation",
+   "influence",
+   "commercial"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "facilitator-s-guide-to-participatory-decision-making-sam-kan",
+  "title": "Facilitator's Guide to Participatory Decision-Making - Sam Kaner",
+  "type": "BOOK",
+  "provider": "Sam Kaner",
+  "url": "https://openlibrary.org/search?q=Facilitator%27s+Guide+to+Participatory+Decision-Making",
+  "description": "The go-to handbook for running inclusive meetings and workshops.",
+  "tags": [
+   "facilitation",
+   "workshops",
+   "collaboration",
+   "inclusion"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "gamestorming-gray-brown-macanufo",
+  "title": "Gamestorming - Gray, Brown & Macanufo",
+  "type": "BOOK",
+  "provider": "Gray, Brown & Macanufo",
+  "url": "https://openlibrary.org/search?q=Gamestorming",
+  "description": "A playbook of workshop games for innovators and changemakers.",
+  "tags": [
+   "facilitation",
+   "workshops",
+   "collaboration"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "the-culture-map-erin-meyer",
+  "title": "The Culture Map - Erin Meyer",
+  "type": "BOOK",
+  "provider": "Erin Meyer",
+  "url": "https://openlibrary.org/search?q=The+Culture+Map",
+  "description": "Work well across cultures by understanding different communication and feedback styles.",
+  "tags": [
+   "inclusion",
+   "communication",
+   "collaboration",
+   "feedback"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "experiential-learning-david-kolb",
+  "title": "Experiential Learning - David Kolb",
+  "type": "BOOK",
+  "provider": "David Kolb",
+  "url": "https://openlibrary.org/search?q=Experiential+Learning",
+  "description": "The theory behind learning by doing, reflecting and applying - the basis of our Consulting Skills programme.",
+  "tags": [
+   "learning",
+   "reflection",
+   "capability-building"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "the-phoenix-project-kim-behr-spafford",
+  "title": "The Phoenix Project - Kim, Behr & Spafford",
+  "type": "BOOK",
+  "provider": "Kim, Behr & Spafford",
+  "url": "https://openlibrary.org/search?q=The+Phoenix+Project",
+  "description": "A novel about DevOps, flow and fixing a failing IT project.",
+  "tags": [
+   "devops",
+   "delivery",
+   "process",
+   "service-management"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "inspired-marty-cagan",
+  "title": "Inspired - Marty Cagan",
+  "type": "BOOK",
+  "provider": "Marty Cagan",
+  "url": "https://openlibrary.org/search?q=Inspired",
+  "description": "How to create tech products customers love, and the role of the product manager.",
+  "tags": [
+   "product",
+   "strategy",
+   "outcomes",
+   "roadmaps"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "drive-daniel-pink",
+  "title": "Drive - Daniel Pink",
+  "type": "BOOK",
+  "provider": "Daniel Pink",
+  "url": "https://openlibrary.org/search?q=Drive",
+  "description": "What really motivates people: autonomy, mastery and purpose.",
+  "tags": [
+   "leadership",
+   "teams",
+   "wellbeing",
+   "mentoring"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "four-thousand-weeks-oliver-burkeman",
+  "title": "Four Thousand Weeks - Oliver Burkeman",
+  "type": "BOOK",
+  "provider": "Oliver Burkeman",
+  "url": "https://openlibrary.org/search?q=Four+Thousand+Weeks",
+  "description": "Time management for people who know they can't do everything.",
+  "tags": [
+   "time-management",
+   "wellbeing",
+   "resilience",
+   "ownership"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "the-fearless-organization-amy-edmondson",
+  "title": "The Fearless Organization - Amy Edmondson",
+  "type": "BOOK",
+  "provider": "Amy Edmondson",
+  "url": "https://openlibrary.org/search?q=The+Fearless+Organization",
+  "description": "Psychological safety: why it matters and how leaders build it.",
+  "tags": [
+   "inclusion",
+   "teams",
+   "leadership",
+   "wellbeing"
+  ],
+  "level": "Intermediate",
+  "duration": null,
+  "cost": "Free",
+  "format": null
+ },
+ {
+  "id": "learning-how-to-learn",
+  "title": "Learning How to Learn",
+  "type": "COURSE",
+  "provider": "Coursera",
+  "url": "https://www.coursera.org/learn/learning-how-to-learn",
+  "description": "A hugely popular free course on how learning works and how to do it better.",
+  "tags": [
+   "learning",
+   "reflection"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "negotiation-courses",
+  "title": "Negotiation courses",
+  "type": "COURSE",
+  "provider": "Coursera",
+  "url": "https://www.coursera.org/search?query=negotiation",
+  "description": "Foundations of preparing for and conducting negotiations.",
+  "tags": [
+   "negotiation",
+   "commercial",
+   "influence"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "facilitation-skills",
+  "title": "Facilitation skills",
+  "type": "COURSE",
+  "provider": "LinkedIn Learning",
+  "url": "https://www.linkedin.com/learning/search?keywords=facilitation+skills",
+  "description": "Short courses on planning and running effective sessions.",
+  "tags": [
+   "facilitation",
+   "workshops"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "giving-and-receiving-feedback",
+  "title": "Giving and receiving feedback",
+  "type": "COURSE",
+  "provider": "LinkedIn Learning",
+  "url": "https://www.linkedin.com/learning/search?keywords=giving+feedback",
+  "description": "Practical models for feedback conversations.",
+  "tags": [
+   "feedback",
+   "mentoring",
+   "communication"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "stakeholder-management",
+  "title": "Stakeholder management",
+  "type": "COURSE",
+  "provider": "LinkedIn Learning",
+  "url": "https://www.linkedin.com/learning/search?keywords=stakeholder+management",
+  "description": "Map, engage and influence stakeholders.",
+  "tags": [
+   "stakeholders",
+   "influence",
+   "communication",
+   "client"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "presentation-and-storytelling-skills",
+  "title": "Presentation and storytelling skills",
+  "type": "COURSE",
+  "provider": "LinkedIn Learning",
+  "url": "https://www.linkedin.com/learning/search?keywords=storytelling+presentation",
+  "description": "Structure and deliver compelling presentations.",
+  "tags": [
+   "presenting",
+   "storytelling",
+   "communication"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "critical-thinking-and-problem-solving",
+  "title": "Critical thinking and problem solving",
+  "type": "COURSE",
+  "provider": "LinkedIn Learning",
+  "url": "https://www.linkedin.com/learning/search?keywords=critical+thinking+problem+solving",
+  "description": "Frameworks for analysing problems and making decisions.",
+  "tags": [
+   "problem-solving",
+   "ambiguity",
+   "analysis"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "bid-and-proposal-writing",
+  "title": "Bid and proposal writing",
+  "type": "COURSE",
+  "provider": "LinkedIn Learning",
+  "url": "https://www.linkedin.com/learning/search?keywords=proposal+writing",
+  "description": "Write winning proposals and bid responses.",
+  "tags": [
+   "bids",
+   "writing",
+   "growth",
+   "commercial"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "free-courses-from-openlearn",
+  "title": "Free courses from OpenLearn",
+  "type": "COURSE",
+  "provider": "The Open University",
+  "url": "https://www.open.edu/openlearn/",
+  "description": "Hundreds of free short courses in management, leadership, psychology and technology.",
+  "tags": [
+   "learning",
+   "leadership",
+   "management"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "inclusive-leadership",
+  "title": "Inclusive leadership",
+  "type": "COURSE",
+  "provider": "LinkedIn Learning",
+  "url": "https://www.linkedin.com/learning/search?keywords=inclusive+leadership",
+  "description": "Build inclusive teams and practices.",
+  "tags": [
+   "inclusion",
+   "leadership",
+   "teams"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Self-paced online"
+ },
+ {
+  "id": "agile-on-the-beach",
+  "title": "Agile on the Beach",
+  "type": "EVENT",
+  "provider": "Agile on the Beach",
+  "url": "https://agileonthebeach.com/",
+  "description": "Annual UK conference on agile, product and team practices.",
+  "tags": [
+   "agile",
+   "product",
+   "teams",
+   "delivery"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Conference"
+ },
+ {
+  "id": "leaddev",
+  "title": "LeadDev",
+  "type": "EVENT",
+  "provider": "LeadDev",
+  "url": "https://leaddev.com/",
+  "description": "Conferences and articles for engineering leaders.",
+  "tags": [
+   "leadership",
+   "software-engineering",
+   "teams",
+   "mentoring"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Conference"
+ },
+ {
+  "id": "ux-london",
+  "title": "UX London",
+  "type": "EVENT",
+  "provider": "UX London",
+  "url": "https://uxlondon.com/",
+  "description": "Three days of talks and workshops on UX and design leadership.",
+  "tags": [
+   "research",
+   "interaction-design",
+   "service-design",
+   "design-strategy"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Conference"
+ },
+ {
+  "id": "big-data-ldn",
+  "title": "Big Data LDN",
+  "type": "EVENT",
+  "provider": "Big Data LDN",
+  "url": "https://bigdataldn.com/",
+  "description": "Free UK data and AI conference and exhibition.",
+  "tags": [
+   "data",
+   "ai",
+   "analytics",
+   "data-engineering"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Conference"
+ },
+ {
+  "id": "aws-summits",
+  "title": "AWS Summits",
+  "type": "EVENT",
+  "provider": "AWS Summits",
+  "url": "https://aws.amazon.com/events/summits/",
+  "description": "Free one-day cloud events with technical sessions.",
+  "tags": [
+   "cloud",
+   "architecture",
+   "infrastructure",
+   "devops"
+  ],
+  "level": "Foundation",
+  "duration": null,
+  "cost": "Free / Paid",
+  "format": "Conference"
+ }
+]
