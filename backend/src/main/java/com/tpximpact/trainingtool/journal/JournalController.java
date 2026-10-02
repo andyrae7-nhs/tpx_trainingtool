@@ -1,6 +1,8 @@
 package com.tpximpact.trainingtool.journal;
 
 import com.tpximpact.trainingtool.ai.AnthropicClient;
+import com.tpximpact.trainingtool.certification.Certification;
+import com.tpximpact.trainingtool.certification.CertificationRepository;
 import com.tpximpact.trainingtool.common.ApiException;
 import com.tpximpact.trainingtool.gamification.Activity;
 import com.tpximpact.trainingtool.gamification.GamificationService;
@@ -30,9 +32,11 @@ public class JournalController {
     private final GamificationService gamification;
     private final ProgressionService progression;
     private final AnthropicClient ai;
+    private final CertificationRepository certifications;
 
     public JournalController(JournalEntryRepository entries, CurrentUser currentUser, GamificationService gamification,
-                             ProgressionService progression, AnthropicClient ai) {
+                             ProgressionService progression, AnthropicClient ai, CertificationRepository certifications) {
+        this.certifications = certifications;
         this.entries = entries;
         this.currentUser = currentUser;
         this.gamification = gamification;
@@ -131,6 +135,19 @@ public class JournalController {
             if (e.getRefs().isEmpty()) untagged.add(e);
             e.getRefs().forEach(r -> grouped.computeIfAbsent(r, k -> new ArrayList<>()).add(e));
         }
+        // Earned certifications achieved by the end of the period sit alongside the journal entries.
+        List<Certification> certs = certifications.findByUserId(me.getId()).stream()
+                .filter(c -> Certification.EARNED.equals(c.getStatus()))
+                .filter(c -> c.getIssuedOn() == null || !c.getIssuedOn().isAfter(end))
+                .sorted(Comparator.comparing(Certification::getIssuedOn, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+        Map<String, List<Certification>> certsByRef = new HashMap<>();
+        for (Certification c : certs) {
+            c.getRefs().forEach(r -> {
+                certsByRef.computeIfAbsent(r, k -> new ArrayList<>()).add(c);
+                grouped.computeIfAbsent(r, k -> new ArrayList<>());
+            });
+        }
 
         StringBuilder sb = new StringBuilder();
         sb.append("PROGRESSION ASSESSMENT EVIDENCE - ").append(me.getDisplayName()).append('\n');
@@ -152,14 +169,16 @@ public class JournalController {
                 lastSection = section;
             }
             String name = progression.refName(group.getKey()).orElse(group.getKey());
+            List<Certification> itemCerts = certsByRef.getOrDefault(group.getKey(), List.of());
             sb.append(name).append('\n');
             if (polish) {
-                Optional<String> summary = summarise(name, group.getValue());
+                Optional<String> summary = summarise(name, group.getValue(), itemCerts);
                 if (summary.isPresent()) {
                     sb.append(summary.get().trim()).append("\n\nSupporting examples:\n");
                     usedAi = true;
                 }
             }
+            for (Certification c : itemCerts) sb.append(certBullet(c, false));
             for (JournalEntry e : group.getValue()) sb.append(bullet(e));
             sb.append('\n');
         }
@@ -167,7 +186,12 @@ public class JournalController {
             sb.append("== OTHER EVIDENCE ==\n\n");
             untagged.forEach(e -> sb.append(bullet(e)));
         }
-        if (list.isEmpty()) sb.append("No journal entries in this period yet.\n");
+        if (!certs.isEmpty()) {
+            sb.append("== CERTIFICATIONS ==\n\n");
+            certs.forEach(c -> sb.append(certBullet(c, true)));
+            sb.append('\n');
+        }
+        if (list.isEmpty() && certs.isEmpty()) sb.append("No journal entries in this period yet.\n");
 
         gamification.record(me, Activity.JOURNAL_EXPORTED);
         return new ExportResponse(sb.toString().trim() + "\n", list.size(), usedAi ? "claude" : "plain");
@@ -180,9 +204,25 @@ public class JournalController {
         return sb.append('\n').toString();
     }
 
-    private Optional<String> summarise(String itemName, List<JournalEntry> evidence) {
+    /** One line for a certification. With details, adds the credential ID and verification link. */
+    private String certBullet(Certification c, boolean details) {
+        StringBuilder sb = new StringBuilder("• Certification: ").append(c.getName());
+        if (c.getIssuer() != null) sb.append(" (").append(c.getIssuer()).append(')');
+        if (c.getIssuedOn() != null) sb.append(", achieved ").append(c.getIssuedOn().format(UK_DATE));
+        switch (c.expiry(LocalDate.now())) {
+            case EXPIRED -> sb.append(", expired ").append(c.getExpiresOn().format(UK_DATE));
+            case ACTIVE, EXPIRING_SOON -> sb.append(", valid until ").append(c.getExpiresOn().format(UK_DATE));
+            default -> { }
+        }
+        if (details && c.getCredentialId() != null) sb.append(". Credential ID: ").append(c.getCredentialId());
+        if (details && c.getCredentialUrl() != null) sb.append(". Verify: ").append(c.getCredentialUrl());
+        return sb.append('\n').toString();
+    }
+
+    private Optional<String> summarise(String itemName, List<JournalEntry> evidence, List<Certification> certs) {
         if (!ai.enabled()) return Optional.empty();
         StringBuilder sb = new StringBuilder();
+        certs.forEach(c -> sb.append(certBullet(c, false)));
         evidence.forEach(e -> sb.append(bullet(e)));
         String system = "You help TPXimpact consultants write their end-of-year progression assessment. "
                 + "Write in the first person, plain British English, active voice, no jargon. Do not invent facts.";

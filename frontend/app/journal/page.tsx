@@ -1,13 +1,24 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { AppShell } from '@/components/AppShell';
+import { CertBadges } from '@/components/CertBadges';
 import { ErrorBox, Loading, Modal } from '@/components/ui';
 import { del, get, post, put } from '@/lib/api';
 import { itemTypeLabel, ukDate } from '@/lib/format';
-import type { GapReport, JournalEntry } from '@/lib/types';
+import type { Certification, CertificationBadge, GapReport, JournalEntry } from '@/lib/types';
 
 type Option = { ref: string; name: string; type: string };
+
+const badge = (c: Certification): CertificationBadge => ({ id: c.id, name: c.name, issuer: c.issuer, status: c.status, expiry: c.expiry, expiresOn: c.expiresOn });
+
+/** Certifications tagged to any of the given refs, without duplicates. */
+function certsFor(byRef: Map<string, CertificationBadge[]>, refs: string[]): CertificationBadge[] {
+  const seen = new Map<number, CertificationBadge>();
+  refs.forEach((r) => (byRef.get(r) || []).forEach((c) => seen.set(c.id, c)));
+  return [...seen.values()];
+}
 
 export default function JournalPage() {
   return (
@@ -23,11 +34,13 @@ function Journal() {
   const [editing, setEditing] = useState<Partial<JournalEntry> & { refList?: string[] } | null>(null);
   const [exporting, setExporting] = useState(false);
   const [filter, setFilter] = useState('');
+  const [certs, setCerts] = useState<Certification[]>([]);
 
   const load = () => get<JournalEntry[]>('/journal').then(setEntries);
 
   useEffect(() => {
     load();
+    get<Certification[]>('/certifications').then(setCerts).catch(() => {});
     get<GapReport>('/progression/gap')
       .then((r) => setOptions([...r.skills, ...r.behaviours, ...r.impacts].map((i) => ({ ref: i.ref, name: i.name, type: i.type }))))
       .catch(() => {});
@@ -36,11 +49,20 @@ function Journal() {
   }, []);
 
   const shown = useMemo(() => (entries || []).filter((e) => !filter || e.refs.some((r) => r.ref === filter)), [entries, filter]);
+  const certsByRef = useMemo(() => {
+    const m = new Map<string, CertificationBadge[]>();
+    certs.forEach((c) => c.refs.forEach((r) => m.set(r.ref, [...(m.get(r.ref) || []), badge(c)])));
+    return m;
+  }, [certs]);
   const usedRefs = useMemo(() => {
     const m = new Map<string, string>();
     (entries || []).forEach((e) => e.refs.forEach((r) => m.set(r.ref, r.name)));
+    certs.forEach((c) => c.refs.forEach((r) => m.set(r.ref, r.name)));
     return [...m.entries()];
-  }, [entries]);
+  }, [entries, certs]);
+  const filterName = usedRefs.find(([ref]) => ref === filter)?.[1];
+  const filterCerts = filter ? certsFor(certsByRef, [filter]) : [];
+  const currentCerts = certs.filter((c) => c.status === 'EARNED' && c.expiry !== 'EXPIRED').map(badge);
 
   return (
     <>
@@ -69,6 +91,24 @@ function Journal() {
               {name}
             </button>
           ))}
+        </div>
+      )}
+
+      {filter && filterCerts.length > 0 && (
+        <div className="card flat cert-strip" style={{ marginBottom: '1rem' }}>
+          <strong className="small">📜 Certifications for {filterName}:</strong>
+          <CertBadges certs={filterCerts} />
+        </div>
+      )}
+      {!filter && certs.length > 0 && (
+        <div className="card flat cert-strip" style={{ marginBottom: '1rem' }}>
+          <strong className="small">
+            📜 {currentCerts.length} current certification{currentCerts.length === 1 ? '' : 's'} back up your evidence:
+          </strong>
+          <CertBadges certs={currentCerts} compact />
+          <Link href="/certifications" className="small">
+            Manage
+          </Link>
         </div>
       )}
 
@@ -121,6 +161,7 @@ function Journal() {
                     {r.name}
                   </span>
                 ))}
+                <CertBadges certs={certsFor(certsByRef, e.refs.map((r) => r.ref))} compact />
               </div>
             </article>
           ))}
@@ -131,6 +172,7 @@ function Journal() {
         <EntryForm
           initial={editing}
           options={options}
+          certsByRef={certsByRef}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -146,11 +188,13 @@ function Journal() {
 function EntryForm({
   initial,
   options,
+  certsByRef,
   onClose,
   onSaved,
 }: {
   initial: Partial<JournalEntry> & { refList?: string[] };
   options: Option[];
+  certsByRef: Map<string, CertificationBadge[]>;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -224,6 +268,12 @@ function EntryForm({
               </div>
             );
           })}
+          {certsFor(certsByRef, refs).length > 0 && (
+            <div className="cert-strip mt">
+              <span className="xs muted">Your certifications for these items:</span>
+              <CertBadges certs={certsFor(certsByRef, refs)} compact />
+            </div>
+          )}
         </div>
         <div className="row" style={{ justifyContent: 'flex-end' }}>
           <button type="button" className="btn secondary" onClick={onClose}>
@@ -295,7 +345,7 @@ function ExportModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal title="Export for your assessment" onClose={onClose}>
-      <p className="small">Your evidence, grouped by skill, behaviour and impact, ready to paste into your progression assessment.</p>
+      <p className="small">Your evidence and certifications, grouped by skill, behaviour and impact, ready to paste into your progression assessment.</p>
       <div className="grid grid-2">
         <div className="field">
           <label htmlFor="f">From (optional)</label>

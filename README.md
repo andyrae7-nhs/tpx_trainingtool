@@ -23,9 +23,11 @@ Pick your job role and grade, and TPX Grow compares you against the Progression 
 | **AI training plan** | `/plan` | Sends your biggest gaps and a shortlist of matching resources to Claude, which picks training for each gap. Each pick comes with a reason, a practical on-the-job action and some quick wins. With no API key, a rule-based matcher does the job instead. |
 | **Training library** | `/library` | About 100 courses, books, events, guides and internal Consulting Skills programmes. **Every link sits next to a short description** of what it is, plus its type, level, cost and format. Colleague reviews show beside each one. |
 | **Evidence journal** | `/journal` | Log what you did and the impact it had, then tag each entry to framework items. **Export** groups your evidence by skill, behaviour and impact, ready to **copy and paste** into your progression assessment. You can also download it as `.txt`, and optionally have Claude draft a summary paragraph for each item. |
+| **Certifications** | `/certifications` | List the certifications you hold or are working towards, with issuer, dates, credential ID and a verification link. When you type a name (there's type-ahead for about 40 common ones: AWS, Azure, PRINCE2, Scrum, ISTQB, BCS…), the app **suggests which skills and behaviours it supports**, and you can edit them. Each certification then **appears next to those items in gap analysis and the evidence journal**, and in the evidence export. Expiring and expired certifications are flagged. |
 | **Learning log** | `/learning` | Track courses, books, events and programmes as planned, in progress or completed. Give each a star rating, write a review and share it with colleagues. |
 | **Achievements** | `/achievements` | 20 badges across Getting started, Evidence, Learning, Together and Mastery. XP, levels (Seedling → Forest) and daily streaks. Pip celebrates each new badge with confetti. |
 | **Leaderboard** | `/leaderboard` | XP rankings for everyone, your capability or the people you follow. Filter by this week, this month or all time. |
+| **Idea gacha** | `/gacha` | Spend gems on a 10-pull of random ideas: development actions, project and hackathon ideas, and every resource in the training library. There are four rarities from Common to Legendary, pity (a guaranteed Legendary within 50 pulls), a collection to complete and a pull history. It's **pay to win, as satire**: pulls award XP, XP ranks you on the leaderboard, and a pretend gem shop raises your VIP tier, which boosts XP from pulls. **No real money is involved.** |
 | **Community** | `/community`, `/people/:id` | An informal feed with posts, likes and comments, and a way to follow colleagues. Badges and shared reviews post to the feed automatically, so friends can see what you're learning. |
 | **Pip, your assistant** | Everywhere | A pop-up helper in the spirit of the old Office assistant, as an original sprout character. Pip offers tips for each page and chats about your gaps and evidence, using Claude when configured. You can hide Pip if you want peace and quiet. |
 
@@ -92,9 +94,9 @@ cd backend && mvn spring-boot:run
 cd frontend && npm install && npm run dev      # http://localhost:3000, proxies to :8080
 ```
 
-**Frontend-only work:** if you don't have Java handy, `node tools/mock-api/server.js` starts a lightweight in-memory mock of the API on port 8080. It covers the main flows and uses the same framework and catalogue data.
+**Frontend-only work:** if you don't have Java handy, `node tools/mock-api/server.js` starts a lightweight in-memory mock of the API on port 8080. It covers the main flows, including the idea gacha, and uses the same framework and catalogue data.
 
-Run the backend tests with `cd backend && mvn test`. `ApiSmokeTest` walks through registering, onboarding, gap analysis, getting a plan, adding a journal entry, exporting, achievements and the leaderboard.
+Run the backend tests with `cd backend && mvn test`. `ApiSmokeTest` walks through registering, onboarding, gap analysis, getting a plan, adding a journal entry, exporting, achievements and the leaderboard. `CertificationApiTest` covers adding certifications, suggestions, validation and seeing them in gap analysis and the export. `GachaApiTest` covers pulls, guarantees, the daily claim, the shop, XP trading, the collection and history.
 
 ---
 
@@ -189,6 +191,18 @@ Everything is under `/api`. Endpoints marked 🔒 need an `Authorization: Bearer
 | DELETE | `/journal/{id}` | | `204` |
 | GET | `/journal/export` | `from`, `to` (YYYY-MM-DD) and `polish=true` for AI summaries | `{text, entryCount, generatedBy}`: plain text grouped by framework item, ready to paste |
 
+### Certifications 🔒
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/certifications` | | Your certifications, current first: `[{id, name, issuer, status, credentialId, credentialUrl, issuedOn, expiresOn, expiry, notes, refs[{ref, name}]}]` |
+| POST | `/certifications` | `{name, issuer?, status?: "EARNED"\|"IN_PROGRESS", credentialId?, credentialUrl?, issuedOn?, expiresOn?, notes?, refs?: ["SKILL:<id>", ...]}` | `201` certification. Unknown refs are dropped |
+| PUT | `/certifications/{id}` | Same as POST | Updated certification |
+| DELETE | `/certifications/{id}` | | `204` |
+| POST | `/certifications/suggest` | `{name, issuer?}` | Suggested framework items `[{ref, name, type, score}]`, drawn from your role |
+| GET | `/certifications/known` | | Common certifications for type-ahead `[{name, issuer}]` |
+
+`expiry` is `NO_EXPIRY`, `ACTIVE`, `EXPIRING_SOON` (within 90 days) or `EXPIRED`. Every item in `GET /progression/gap` also has `certifications[{id, name, issuer, status, expiry, expiresOn}]`. `GET /journal/export` lists earned certifications under each item they support, plus a `CERTIFICATIONS` section with credential IDs and verification links.
+
 ### Learning log 🔒
 | Method | Path | Body / query | Returns |
 |---|---|---|---|
@@ -206,6 +220,29 @@ Everything is under `/api`. Endpoints marked 🔒 need an `Authorization: Bearer
 | POST | `/achievements/unseen` | | Badges unlocked since the last call. The frontend uses this to celebrate |
 | GET | `/leaderboard` | `scope=all\|capability\|friends`, `period=all\|month\|week` | Ranked rows |
 | GET | `/activity` | | Your 20 most recent XP events |
+
+### Idea gacha 🔒
+Gems come from a starter grant (1,000, enough for one 10-pull), a daily claim (300), trading in XP (1 XP = 5 gems), or the pretend gem shop. The shop never takes payment.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/gacha` | | `{wallet, banners[{code, name, cost, description, guaranteedLegendary, odds}], shop[], vipTiers[], poolSize, pullsPerBatch, minXpExchange}` |
+| POST | `/gacha/pull` | `{banner: "STANDARD"\|"BOOSTED"\|"WHALE"}` (default `STANDARD`) | `{batchId, banner, cards[{idea, isNew, xp, gemRefund, pity}], gemsSpent, gemsRefunded, xpGained, badgesUnlocked[], wallet}`. `400` if you can't afford it |
+| POST | `/gacha/daily` | | `wallet`. `400` if you've already claimed today |
+| POST | `/gacha/exchange` | `{xp}` (minimum 10) | `wallet`. Removes that XP and adds gems |
+| POST | `/gacha/shop/{code}` | | `wallet`. Pack codes: `pocket-change`, `consultants-coffer`, `partner-track`, `whale-of-a-time` |
+| GET | `/gacha/collection` | | `{poolSize, owned, byRarity[], items[]}`. Cards you haven't pulled only show their rarity and kind |
+| GET | `/gacha/history` | | Your last 10 ten-pulls |
+
+`wallet` is `{gems, xp, pityCount, pityThreshold, dailyAvailable, dailyGems, vipLevel, vipTitle, xpBonusPercent, fakeSpendPence, nextVipTitle, nextVipPence, totalPulls, gemsPerXp}`.
+
+| Banner | Cost | Common | Rare | Epic | Legendary | Extra |
+|---|---|---|---|---|---|---|
+| Standard | 1,000 💎 | 60% | 28% | 10% | 2% | At least one Rare or better |
+| Boosted | 1,500 💎 | 48.4% | 22.6% | 24.2% | 4.8% | Triple Epic and Legendary weight |
+| Whale | 5,000 💎 | 48.4% | 22.6% | 24.2% | 4.8% | Guaranteed Legendary |
+
+Each pull earns XP by rarity (3 / 8 / 25 / 100) plus 10% per VIP level. Duplicates refund gems (10 / 25 / 60 / 200). You can change any of these numbers in `gacha/GachaEconomy.java` and `gacha/Rarity.java`.
 
 ### Community 🔒
 | Method | Path | Body / query | Returns |
@@ -236,6 +273,8 @@ Everything is under `/api`. Endpoints marked 🔒 need an `Authorization: Bearer
 | Comment | 2 |
 | Follow someone | 2 |
 | Chat with Pip | 1 |
+| Idea gacha pull | 3 to 100 per card, by rarity (+VIP bonus) |
+| Trade XP for gems | minus the XP traded |
 
 Badges add bonus XP on top. Levels need 50 × n × (n−1) XP: 0, 100, 300, 600, 1,000 and so on.
 
@@ -248,8 +287,10 @@ backend/                     Spring Boot API
   src/main/java/com/tpximpact/trainingtool/
     ai/            Claude client, recommendation engine, Pip
     catalogue/     Training catalogue + tag matching
+    certification/ Certifications + skill suggestions
     config/        App properties, demo data seeder
     framework/     Progression framework loader + endpoints
+    gacha/         Idea gacha: idea pool, gems, pulls, pretend gem shop
     gamification/  XP, levels, achievements, leaderboard
     journal/       Evidence journal + export
     learning/      Learning log + reviews

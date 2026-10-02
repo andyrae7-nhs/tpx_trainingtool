@@ -63,6 +63,20 @@ public class GamificationService {
         return evaluate(user);
     }
 
+    /**
+     * Add (or, with a negative amount, remove) a variable amount of XP, e.g. gacha rewards and
+     * XP traded for gems. XP never drops below zero. Returns any achievements this unlocks.
+     */
+    @Transactional
+    public List<Achievement> adjustXp(User user, Activity act, int amount) {
+        int applied = Math.max(amount, -user.getXp());
+        if (applied == 0) return List.of();
+        user.setXp(user.getXp() + applied);
+        activity.save(new ActivityLog(user.getId(), act, applied));
+        users.save(user);
+        return applied > 0 ? evaluate(user) : List.of();
+    }
+
     /** Update the daily streak. Call once per authenticated session start. */
     @Transactional
     public void touch(User user) {

@@ -1,5 +1,7 @@
 package com.tpximpact.trainingtool.ai;
 
+import com.tpximpact.trainingtool.certification.Certification;
+import com.tpximpact.trainingtool.certification.CertificationRepository;
 import com.tpximpact.trainingtool.journal.JournalEntryRepository;
 import com.tpximpact.trainingtool.progression.ProgressionService;
 import com.tpximpact.trainingtool.user.User;
@@ -17,10 +19,13 @@ public class PipService {
     private final AnthropicClient ai;
     private final ProgressionService progression;
     private final JournalEntryRepository journal;
+    private final CertificationRepository certifications;
     private final Random random = new Random();
 
-    public PipService(AnthropicClient ai, ProgressionService progression, JournalEntryRepository journal) {
+    public PipService(AnthropicClient ai, ProgressionService progression, JournalEntryRepository journal,
+                      CertificationRepository certifications) {
         this.ai = ai;
+        this.certifications = certifications;
         this.progression = progression;
         this.journal = journal;
     }
@@ -39,7 +44,8 @@ public class PipService {
             "Feedback counts as evidence too. Paste in a kind note from a client or colleague and tag it.",
             "Your streak grows every day you visit. Small, regular steps beat a big push in March!",
             "Behaviours matter as much as technical skills for promotion. Check your behaviour gaps too.",
-            "Running a lunch and learn is great evidence for 'Practice area' impact.");
+            "Running a lunch and learn is great evidence for 'Practice area' impact.",
+            "Got a certification? Add it under Certifications and it'll show up next to the skills it supports.");
 
     public String tip() {
         return TIPS.get(random.nextInt(TIPS.size()));
@@ -117,6 +123,14 @@ public class PipService {
         var entries = journal.findByUserIdOrderByEntryDateDescIdDesc(user.getId());
         sb.append("Journal entries so far: ").append(entries.size()).append('\n');
         entries.stream().limit(3).forEach(e -> sb.append("- recent: ").append(e.getTitle()).append('\n'));
+        var certs = certifications.findByUserId(user.getId());
+        if (!certs.isEmpty()) {
+            sb.append("Certifications:\n");
+            certs.stream().limit(10).forEach(c -> sb.append("- ").append(c.getName())
+                    .append(Certification.IN_PROGRESS.equals(c.getStatus()) ? " (working towards)" : "")
+                    .append(c.expiry(java.time.LocalDate.now()) == Certification.Expiry.EXPIRED ? " (expired)" : "")
+                    .append('\n'));
+        }
         return sb.toString();
     }
 

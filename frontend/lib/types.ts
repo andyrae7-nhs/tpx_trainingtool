@@ -55,6 +55,7 @@ export type GapItem = {
   targetDescriptor?: string;
   note?: string;
   evidenceCount: number;
+  certifications: CertificationBadge[];
 };
 
 export type GapReport = {
@@ -207,3 +208,133 @@ export type RoleDetail = {
   practice: string;
   skills: { skill: { id: string; name: string; definition?: string; levels: Record<string, string> }; expected: Record<string, string | null> }[];
 };
+
+// ---------- Idea gacha ----------
+export type Rarity = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
+export type IdeaKind = 'ACTION' | 'PROJECT' | 'RESOURCE';
+
+export type GachaWallet = {
+  gems: number;
+  xp: number;
+  pityCount: number;
+  pityThreshold: number;
+  dailyAvailable: boolean;
+  dailyGems: number;
+  vipLevel: number;
+  vipTitle: string;
+  xpBonusPercent: number;
+  fakeSpendPence: number;
+  nextVipTitle?: string;
+  nextVipPence?: number;
+  totalPulls: number;
+  gemsPerXp: number;
+};
+
+export type GachaBanner = {
+  code: 'STANDARD' | 'BOOSTED' | 'WHALE';
+  name: string;
+  cost: number;
+  description: string;
+  guaranteedLegendary: boolean;
+  odds: Record<Rarity, number>;
+};
+
+export type GemPack = { code: string; name: string; pricePence: number; gems: number; tagline: string };
+export type VipTier = { level: number; title: string; minSpendPence: number };
+
+export type GachaOverview = {
+  wallet: GachaWallet;
+  banners: GachaBanner[];
+  shop: GemPack[];
+  vipTiers: VipTier[];
+  poolSize: number;
+  pullsPerBatch: number;
+  minXpExchange: number;
+};
+
+export type GachaIdea = {
+  id: string;
+  kind: IdeaKind;
+  rarity: Rarity;
+  rarityLabel: string;
+  stars: number;
+  title: string;
+  description: string;
+  icon: string;
+  url?: string;
+  resourceId?: string;
+};
+
+export type PulledCard = { idea: GachaIdea; isNew: boolean; xp: number; gemRefund: number; pity: boolean };
+
+export type PullResult = {
+  batchId: string;
+  banner: string;
+  cards: PulledCard[];
+  gemsSpent: number;
+  gemsRefunded: number;
+  xpGained: number;
+  badgesUnlocked: string[];
+  wallet: GachaWallet;
+};
+
+export type CollectionItem = {
+  id: string;
+  kind: IdeaKind;
+  rarity: Rarity;
+  stars: number;
+  owned: boolean;
+  title?: string;
+  description?: string;
+  icon?: string;
+  url?: string;
+  copies: number;
+  firstPulledAt?: string;
+};
+
+export type GachaCollection = {
+  poolSize: number;
+  owned: number;
+  byRarity: { rarity: Rarity; label: string; owned: number; total: number }[];
+  items: CollectionItem[];
+};
+
+export type GachaHistoryBatch = {
+  batchId: string;
+  banner: string;
+  createdAt: string;
+  xpGained: number;
+  cards: { ideaId: string; title: string; icon: string; rarity: Rarity; duplicate: boolean }[];
+};
+// ---------- Certifications ----------
+export type CertificationStatus = 'EARNED' | 'IN_PROGRESS';
+export type CertificationExpiry = 'NO_EXPIRY' | 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED';
+
+/** Short form shown next to framework items. */
+export type CertificationBadge = {
+  id: number;
+  name: string;
+  issuer?: string;
+  status: CertificationStatus;
+  expiry: CertificationExpiry;
+  expiresOn?: string;
+};
+
+export type Certification = {
+  id: number;
+  name: string;
+  issuer?: string;
+  status: CertificationStatus;
+  credentialId?: string;
+  credentialUrl?: string;
+  issuedOn?: string;
+  expiresOn?: string;
+  expiry: CertificationExpiry;
+  notes?: string;
+  refs: { ref: string; name: string }[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CertificationSuggestion = { ref: string; name: string; type: string; score: number };
+export type KnownCertification = { name: string; issuer: string };

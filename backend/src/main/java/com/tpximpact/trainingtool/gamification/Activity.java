@@ -16,7 +16,11 @@ public enum Activity {
     JOURNAL_EXPORTED(10),
     PIP_CHAT(1),
     DAILY_VISIT(3),
-    ACHIEVEMENT_BONUS(0);
+    ACHIEVEMENT_BONUS(0),
+    /** XP traded for gacha gems. Logged with a negative amount. */
+    GACHA_EXCHANGE(0),
+    /** XP won from gacha pulls. Amount varies by rarity. */
+    GACHA_REWARD(0);
 
     private final int xp;
 

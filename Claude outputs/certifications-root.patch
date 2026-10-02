@@ -1,0 +1,1735 @@
+diff --git a/README.md b/README.md
+index c835cac..3615cf6 100755
+--- a/README.md
++++ b/README.md
+@@ -23,6 +23,7 @@ Pick your job role and grade, and TPX Grow compares you against the Progression
+ | **AI training plan** | `/plan` | Sends your biggest gaps and a shortlist of matching resources to Claude, which picks training for each gap. Each pick comes with a reason, a practical on-the-job action and some quick wins. With no API key, a rule-based matcher does the job instead. |
+ | **Training library** | `/library` | About 100 courses, books, events, guides and internal Consulting Skills programmes. **Every link sits next to a short description** of what it is, plus its type, level, cost and format. Colleague reviews show beside each one. |
+ | **Evidence journal** | `/journal` | Log what you did and the impact it had, then tag each entry to framework items. **Export** groups your evidence by skill, behaviour and impact, ready to **copy and paste** into your progression assessment. You can also download it as `.txt`, and optionally have Claude draft a summary paragraph for each item. |
++| **Certifications** | `/certifications` | List the certifications you hold or are working towards, with issuer, dates, credential ID and a verification link. When you type a name (there's type-ahead for about 40 common ones: AWS, Azure, PRINCE2, Scrum, ISTQB, BCS…), the app **suggests which skills and behaviours it supports**, and you can edit them. Each certification then **appears next to those items in gap analysis and the evidence journal**, and in the evidence export. Expiring and expired certifications are flagged. |
+ | **Learning log** | `/learning` | Track courses, books, events and programmes as planned, in progress or completed. Give each a star rating, write a review and share it with colleagues. |
+ | **Achievements** | `/achievements` | 20 badges across Getting started, Evidence, Learning, Together and Mastery. XP, levels (Seedling → Forest) and daily streaks. Pip celebrates each new badge with confetti. |
+ | **Leaderboard** | `/leaderboard` | XP rankings for everyone, your capability or the people you follow. Filter by this week, this month or all time. |
+@@ -94,7 +95,7 @@ cd frontend && npm install && npm run dev      # http://localhost:3000, proxies
+ 
+ **Frontend-only work:** if you don't have Java handy, `node tools/mock-api/server.js` starts a lightweight in-memory mock of the API on port 8080. It covers the main flows and uses the same framework and catalogue data.
+ 
+-Run the backend tests with `cd backend && mvn test`. `ApiSmokeTest` walks through registering, onboarding, gap analysis, getting a plan, adding a journal entry, exporting, achievements and the leaderboard.
++Run the backend tests with `cd backend && mvn test`. `ApiSmokeTest` walks through registering, onboarding, gap analysis, getting a plan, adding a journal entry, exporting, achievements and the leaderboard. `CertificationApiTest` covers adding certifications, suggestions, validation and seeing them in gap analysis and the export.
+ 
+ ---
+ 
+@@ -189,6 +190,18 @@ Everything is under `/api`. Endpoints marked 🔒 need an `Authorization: Bearer
+ | DELETE | `/journal/{id}` | | `204` |
+ | GET | `/journal/export` | `from`, `to` (YYYY-MM-DD) and `polish=true` for AI summaries | `{text, entryCount, generatedBy}`: plain text grouped by framework item, ready to paste |
+ 
++### Certifications 🔒
++| Method | Path | Body | Returns |
++|---|---|---|---|
++| GET | `/certifications` | | Your certifications, current first: `[{id, name, issuer, status, credentialId, credentialUrl, issuedOn, expiresOn, expiry, notes, refs[{ref, name}]}]` |
++| POST | `/certifications` | `{name, issuer?, status?: "EARNED"\|"IN_PROGRESS", credentialId?, credentialUrl?, issuedOn?, expiresOn?, notes?, refs?: ["SKILL:<id>", ...]}` | `201` certification. Unknown refs are dropped |
++| PUT | `/certifications/{id}` | Same as POST | Updated certification |
++| DELETE | `/certifications/{id}` | | `204` |
++| POST | `/certifications/suggest` | `{name, issuer?}` | Suggested framework items `[{ref, name, type, score}]`, drawn from your role |
++| GET | `/certifications/known` | | Common certifications for type-ahead `[{name, issuer}]` |
++
++`expiry` is `NO_EXPIRY`, `ACTIVE`, `EXPIRING_SOON` (within 90 days) or `EXPIRED`. Every item in `GET /progression/gap` also has `certifications[{id, name, issuer, status, expiry, expiresOn}]`. `GET /journal/export` lists earned certifications under each item they support, plus a `CERTIFICATIONS` section with credential IDs and verification links.
++
+ ### Learning log 🔒
+ | Method | Path | Body / query | Returns |
+ |---|---|---|---|
+@@ -248,6 +261,7 @@ backend/                     Spring Boot API
+   src/main/java/com/tpximpact/trainingtool/
+     ai/            Claude client, recommendation engine, Pip
+     catalogue/     Training catalogue + tag matching
++    certification/ Certifications + skill suggestions
+     config/        App properties, demo data seeder
+     framework/     Progression framework loader + endpoints
+     gamification/  XP, levels, achievements, leaderboard
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/ai/PipService.java b/backend/src/main/java/com/tpximpact/trainingtool/ai/PipService.java
+index 8dc247f..df07abb 100755
+--- a/backend/src/main/java/com/tpximpact/trainingtool/ai/PipService.java
++++ b/backend/src/main/java/com/tpximpact/trainingtool/ai/PipService.java
+@@ -1,5 +1,7 @@
+ package com.tpximpact.trainingtool.ai;
+ 
++import com.tpximpact.trainingtool.certification.Certification;
++import com.tpximpact.trainingtool.certification.CertificationRepository;
+ import com.tpximpact.trainingtool.journal.JournalEntryRepository;
+ import com.tpximpact.trainingtool.progression.ProgressionService;
+ import com.tpximpact.trainingtool.user.User;
+@@ -17,10 +19,13 @@ public class PipService {
+     private final AnthropicClient ai;
+     private final ProgressionService progression;
+     private final JournalEntryRepository journal;
++    private final CertificationRepository certifications;
+     private final Random random = new Random();
+ 
+-    public PipService(AnthropicClient ai, ProgressionService progression, JournalEntryRepository journal) {
++    public PipService(AnthropicClient ai, ProgressionService progression, JournalEntryRepository journal,
++                      CertificationRepository certifications) {
+         this.ai = ai;
++        this.certifications = certifications;
+         this.progression = progression;
+         this.journal = journal;
+     }
+@@ -39,7 +44,8 @@ public class PipService {
+             "Feedback counts as evidence too. Paste in a kind note from a client or colleague and tag it.",
+             "Your streak grows every day you visit. Small, regular steps beat a big push in March!",
+             "Behaviours matter as much as technical skills for promotion. Check your behaviour gaps too.",
+-            "Running a lunch and learn is great evidence for 'Practice area' impact.");
++            "Running a lunch and learn is great evidence for 'Practice area' impact.",
++            "Got a certification? Add it under Certifications and it'll show up next to the skills it supports.");
+ 
+     public String tip() {
+         return TIPS.get(random.nextInt(TIPS.size()));
+@@ -117,6 +123,14 @@ public class PipService {
+         var entries = journal.findByUserIdOrderByEntryDateDescIdDesc(user.getId());
+         sb.append("Journal entries so far: ").append(entries.size()).append('\n');
+         entries.stream().limit(3).forEach(e -> sb.append("- recent: ").append(e.getTitle()).append('\n'));
++        var certs = certifications.findByUserId(user.getId());
++        if (!certs.isEmpty()) {
++            sb.append("Certifications:\n");
++            certs.stream().limit(10).forEach(c -> sb.append("- ").append(c.getName())
++                    .append(Certification.IN_PROGRESS.equals(c.getStatus()) ? " (working towards)" : "")
++                    .append(c.expiry(java.time.LocalDate.now()) == Certification.Expiry.EXPIRED ? " (expired)" : "")
++                    .append('\n'));
++        }
+         return sb.toString();
+     }
+ 
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/certification/Certification.java b/backend/src/main/java/com/tpximpact/trainingtool/certification/Certification.java
+new file mode 100644
+index 0000000..4c6dafc
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/certification/Certification.java
+@@ -0,0 +1,99 @@
++package com.tpximpact.trainingtool.certification;
++
++import jakarta.persistence.*;
++
++import java.time.Instant;
++import java.time.LocalDate;
++import java.util.ArrayList;
++import java.util.List;
++
++/** A professional certification someone holds or is working towards, e.g. AWS Solutions Architect. */
++@Entity
++@Table(name = "certification", indexes = @Index(name = "idx_certification_user", columnList = "userId"))
++public class Certification {
++
++    /** Stored as text (not an enum column) so new statuses need no database change. */
++    public static final String EARNED = "EARNED";
++    public static final String IN_PROGRESS = "IN_PROGRESS";
++
++    /** How many days before expiry a certification counts as "expiring soon". */
++    public static final int EXPIRING_SOON_DAYS = 90;
++
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++
++    @Column(nullable = false)
++    private Long userId;
++
++    @Column(nullable = false, length = 200)
++    private String name;
++
++    @Column(length = 120)
++    private String issuer;
++
++    @Column(length = 20, nullable = false)
++    private String status = EARNED;
++
++    @Column(length = 120)
++    private String credentialId;
++
++    @Column(length = 500)
++    private String credentialUrl;
++
++    private LocalDate issuedOn;
++
++    private LocalDate expiresOn;
++
++    @Column(length = 1000)
++    private String notes;
++
++    /** Framework items this certification supports: "SKILL:&lt;id&gt;", "BEHAVIOUR:&lt;id&gt;" or "IMPACT:&lt;id&gt;". */
++    @ElementCollection(fetch = FetchType.EAGER)
++    @CollectionTable(name = "certification_ref", joinColumns = @JoinColumn(name = "certification_id"))
++    @Column(name = "ref")
++    private List<String> refs = new ArrayList<>();
++
++    private Instant createdAt = Instant.now();
++
++    private Instant updatedAt = Instant.now();
++
++    public enum Expiry { NO_EXPIRY, ACTIVE, EXPIRING_SOON, EXPIRED }
++
++    public Expiry expiry(LocalDate today) {
++        if (expiresOn == null) return Expiry.NO_EXPIRY;
++        if (expiresOn.isBefore(today)) return Expiry.EXPIRED;
++        if (!expiresOn.isAfter(today.plusDays(EXPIRING_SOON_DAYS))) return Expiry.EXPIRING_SOON;
++        return Expiry.ACTIVE;
++    }
++
++    /** Earned and not expired: fair to cite as evidence. */
++    public boolean isCurrent(LocalDate today) {
++        return EARNED.equals(status) && expiry(today) != Expiry.EXPIRED;
++    }
++
++    public Long getId() { return id; }
++    public Long getUserId() { return userId; }
++    public void setUserId(Long userId) { this.userId = userId; }
++    public String getName() { return name; }
++    public void setName(String name) { this.name = name; }
++    public String getIssuer() { return issuer; }
++    public void setIssuer(String issuer) { this.issuer = issuer; }
++    public String getStatus() { return status; }
++    public void setStatus(String status) { this.status = status; }
++    public String getCredentialId() { return credentialId; }
++    public void setCredentialId(String credentialId) { this.credentialId = credentialId; }
++    public String getCredentialUrl() { return credentialUrl; }
++    public void setCredentialUrl(String credentialUrl) { this.credentialUrl = credentialUrl; }
++    public LocalDate getIssuedOn() { return issuedOn; }
++    public void setIssuedOn(LocalDate issuedOn) { this.issuedOn = issuedOn; }
++    public LocalDate getExpiresOn() { return expiresOn; }
++    public void setExpiresOn(LocalDate expiresOn) { this.expiresOn = expiresOn; }
++    public String getNotes() { return notes; }
++    public void setNotes(String notes) { this.notes = notes; }
++    public List<String> getRefs() { return refs; }
++    public void setRefs(List<String> refs) { this.refs = refs == null ? new ArrayList<>() : new ArrayList<>(refs); }
++    public Instant getCreatedAt() { return createdAt; }
++    public Instant getUpdatedAt() { return updatedAt; }
++    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/certification/CertificationBadge.java b/backend/src/main/java/com/tpximpact/trainingtool/certification/CertificationBadge.java
+new file mode 100644
+index 0000000..3e54306
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/certification/CertificationBadge.java
+@@ -0,0 +1,12 @@
++package com.tpximpact.trainingtool.certification;
++
++import java.time.LocalDate;
++
++/** The short form of a certification shown next to framework items in gap analysis and the journal. */
++public record CertificationBadge(Long id, String name, String issuer, String status, String expiry, LocalDate expiresOn) {
++
++    public static CertificationBadge of(Certification c, LocalDate today) {
++        return new CertificationBadge(c.getId(), c.getName(), c.getIssuer(), c.getStatus(), c.expiry(today).name(),
++                c.getExpiresOn());
++    }
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/certification/CertificationController.java b/backend/src/main/java/com/tpximpact/trainingtool/certification/CertificationController.java
+new file mode 100644
+index 0000000..bbe8618
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/certification/CertificationController.java
+@@ -0,0 +1,139 @@
++package com.tpximpact.trainingtool.certification;
++
++import com.tpximpact.trainingtool.common.ApiException;
++import com.tpximpact.trainingtool.progression.ProgressionService;
++import com.tpximpact.trainingtool.security.CurrentUser;
++import jakarta.validation.Valid;
++import jakarta.validation.constraints.NotBlank;
++import jakarta.validation.constraints.Pattern;
++import jakarta.validation.constraints.Size;
++import org.springframework.http.HttpStatus;
++import org.springframework.transaction.annotation.Transactional;
++import org.springframework.web.bind.annotation.*;
++
++import java.time.Instant;
++import java.time.LocalDate;
++import java.util.Comparator;
++import java.util.List;
++import java.util.Objects;
++
++/** Your certifications, tagged to the framework items they support. */
++@RestController
++@RequestMapping("/api/certifications")
++public class CertificationController {
++
++    private final CertificationRepository certifications;
++    private final CertificationSuggester suggester;
++    private final ProgressionService progression;
++    private final CurrentUser currentUser;
++
++    public CertificationController(CertificationRepository certifications, CertificationSuggester suggester,
++                                   ProgressionService progression, CurrentUser currentUser) {
++        this.certifications = certifications;
++        this.suggester = suggester;
++        this.progression = progression;
++        this.currentUser = currentUser;
++    }
++
++    public record RefView(String ref, String name) {}
++
++    public record CertificationView(Long id, String name, String issuer, String status, String credentialId,
++                                    String credentialUrl, LocalDate issuedOn, LocalDate expiresOn, String expiry,
++                                    String notes, List<RefView> refs, Instant createdAt, Instant updatedAt) {}
++
++    public record CertificationInput(
++            @NotBlank @Size(max = 200) String name,
++            @Size(max = 120) String issuer,
++            @Pattern(regexp = "EARNED|IN_PROGRESS", message = "must be EARNED or IN_PROGRESS") String status,
++            @Size(max = 120) String credentialId,
++            @Size(max = 500) @Pattern(regexp = "^$|^https?://.*", message = "must start with http:// or https://") String credentialUrl,
++            LocalDate issuedOn,
++            LocalDate expiresOn,
++            @Size(max = 1000) String notes,
++            List<String> refs) {}
++
++    public record SuggestInput(@Size(max = 200) String name, @Size(max = 120) String issuer) {}
++
++    /** Current and in-progress first, then most recently achieved. */
++    private static final Comparator<Certification> ORDER = Comparator
++            .comparing((Certification c) -> c.expiry(LocalDate.now()) == Certification.Expiry.EXPIRED)
++            .thenComparing(c -> Certification.IN_PROGRESS.equals(c.getStatus()) ? 0 : 1)
++            .thenComparing(Certification::getIssuedOn, Comparator.nullsLast(Comparator.reverseOrder()))
++            .thenComparing(Certification::getId, Comparator.reverseOrder());
++
++    private CertificationView view(Certification c) {
++        return new CertificationView(c.getId(), c.getName(), c.getIssuer(), c.getStatus(), c.getCredentialId(),
++                c.getCredentialUrl(), c.getIssuedOn(), c.getExpiresOn(), c.expiry(LocalDate.now()).name(), c.getNotes(),
++                c.getRefs().stream().map(r -> new RefView(r, progression.refName(r).orElse(r))).toList(),
++                c.getCreatedAt(), c.getUpdatedAt());
++    }
++
++    @GetMapping
++    public List<CertificationView> list() {
++        return certifications.findByUserId(currentUser.id()).stream().sorted(ORDER).map(this::view).toList();
++    }
++
++    @PostMapping
++    @ResponseStatus(HttpStatus.CREATED)
++    @Transactional
++    public CertificationView create(@Valid @RequestBody CertificationInput in) {
++        Certification c = new Certification();
++        c.setUserId(currentUser.id());
++        apply(c, in);
++        return view(certifications.save(c));
++    }
++
++    @PutMapping("/{id}")
++    @Transactional
++    public CertificationView update(@PathVariable Long id, @Valid @RequestBody CertificationInput in) {
++        Certification c = owned(id);
++        apply(c, in);
++        c.setUpdatedAt(Instant.now());
++        return view(certifications.save(c));
++    }
++
++    @DeleteMapping("/{id}")
++    @ResponseStatus(HttpStatus.NO_CONTENT)
++    @Transactional
++    public void delete(@PathVariable Long id) {
++        certifications.delete(owned(id));
++    }
++
++    /** Suggested framework items for a certification you're about to add. */
++    @PostMapping("/suggest")
++    public List<CertificationSuggester.Suggestion> suggest(@Valid @RequestBody SuggestInput in) {
++        return suggester.suggest(currentUser.get(), in.name(), in.issuer());
++    }
++
++    /** Common certifications for type-ahead. You can still enter any certification. */
++    @GetMapping("/known")
++    public List<CertificationSuggester.KnownCertification> known() {
++        return CertificationSuggester.KNOWN;
++    }
++
++    private Certification owned(Long id) {
++        Certification c = certifications.findById(id).orElseThrow(() -> ApiException.notFound("Certification"));
++        if (!c.getUserId().equals(currentUser.id())) throw ApiException.forbidden();
++        return c;
++    }
++
++    private void apply(Certification c, CertificationInput in) {
++        if (in.issuedOn() != null && in.expiresOn() != null && in.expiresOn().isBefore(in.issuedOn())) {
++            throw ApiException.badRequest("The expiry date can't be before the date you achieved it");
++        }
++        c.setName(in.name().trim());
++        c.setIssuer(blankToNull(in.issuer()));
++        c.setStatus(Objects.requireNonNullElse(blankToNull(in.status()), Certification.EARNED));
++        c.setCredentialId(blankToNull(in.credentialId()));
++        c.setCredentialUrl(blankToNull(in.credentialUrl()));
++        c.setIssuedOn(in.issuedOn());
++        c.setExpiresOn(in.expiresOn());
++        c.setNotes(blankToNull(in.notes()));
++        c.setRefs(in.refs() == null ? List.of() : in.refs().stream()
++                .filter(r -> progression.refName(r).isPresent()).distinct().toList());
++    }
++
++    private static String blankToNull(String s) {
++        return s == null || s.isBlank() ? null : s.trim();
++    }
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/certification/CertificationRepository.java b/backend/src/main/java/com/tpximpact/trainingtool/certification/CertificationRepository.java
+new file mode 100644
+index 0000000..0e3208e
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/certification/CertificationRepository.java
+@@ -0,0 +1,11 @@
++package com.tpximpact.trainingtool.certification;
++
++import org.springframework.data.jpa.repository.JpaRepository;
++
++import java.util.List;
++
++public interface CertificationRepository extends JpaRepository<Certification, Long> {
++    List<Certification> findByUserId(Long userId);
++
++    long countByUserId(Long userId);
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/certification/CertificationSuggester.java b/backend/src/main/java/com/tpximpact/trainingtool/certification/CertificationSuggester.java
+new file mode 100644
+index 0000000..be038ae
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/certification/CertificationSuggester.java
+@@ -0,0 +1,200 @@
++package com.tpximpact.trainingtool.certification;
++
++import com.tpximpact.trainingtool.catalogue.TagMatcher;
++import com.tpximpact.trainingtool.framework.FrameworkModels.GradedItem;
++import com.tpximpact.trainingtool.framework.FrameworkModels.Role;
++import com.tpximpact.trainingtool.framework.FrameworkModels.RoleSkill;
++import com.tpximpact.trainingtool.framework.FrameworkModels.Skill;
++import com.tpximpact.trainingtool.framework.FrameworkService;
++import com.tpximpact.trainingtool.user.User;
++import org.springframework.stereotype.Component;
++
++import java.util.*;
++
++/**
++ * Suggests which framework items a certification supports. The certification name and issuer are
++ * turned into topic tags (e.g. "AWS" becomes cloud and infrastructure), then compared with the tags
++ * {@link TagMatcher} gives each skill, behaviour and impact area in the person's role.
++ */
++@Component
++public class CertificationSuggester {
++
++    /** Most skills to suggest for one certification. */
++    static final int MAX_SKILLS = 4;
++
++    private final FrameworkService framework;
++
++    public CertificationSuggester(FrameworkService framework) {
++        this.framework = framework;
++    }
++
++    public record KnownCertification(String name, String issuer) {}
++
++    /** Common certifications, offered as type-ahead suggestions. People can enter anything. */
++    public static final List<KnownCertification> KNOWN = List.of(
++            new KnownCertification("AWS Certified Cloud Practitioner", "Amazon Web Services"),
++            new KnownCertification("AWS Certified Solutions Architect - Associate", "Amazon Web Services"),
++            new KnownCertification("AWS Certified Solutions Architect - Professional", "Amazon Web Services"),
++            new KnownCertification("AWS Certified Developer - Associate", "Amazon Web Services"),
++            new KnownCertification("AWS Certified DevOps Engineer - Professional", "Amazon Web Services"),
++            new KnownCertification("AWS Certified Data Engineer - Associate", "Amazon Web Services"),
++            new KnownCertification("Microsoft Certified: Azure Fundamentals (AZ-900)", "Microsoft"),
++            new KnownCertification("Microsoft Certified: Azure Administrator Associate (AZ-104)", "Microsoft"),
++            new KnownCertification("Microsoft Certified: Azure Solutions Architect Expert (AZ-305)", "Microsoft"),
++            new KnownCertification("Microsoft Certified: Azure Data Engineer Associate (DP-203)", "Microsoft"),
++            new KnownCertification("Microsoft Certified: Power BI Data Analyst Associate (PL-300)", "Microsoft"),
++            new KnownCertification("Google Cloud Professional Cloud Architect", "Google Cloud"),
++            new KnownCertification("Google Cloud Professional Data Engineer", "Google Cloud"),
++            new KnownCertification("HashiCorp Certified: Terraform Associate", "HashiCorp"),
++            new KnownCertification("Certified Kubernetes Administrator (CKA)", "The Linux Foundation"),
++            new KnownCertification("Certified Kubernetes Application Developer (CKAD)", "The Linux Foundation"),
++            new KnownCertification("CompTIA Security+", "CompTIA"),
++            new KnownCertification("CISSP", "ISC2"),
++            new KnownCertification("ISTQB Certified Tester Foundation Level", "ISTQB"),
++            new KnownCertification("ISTQB Advanced Level Test Analyst", "ISTQB"),
++            new KnownCertification("TOGAF Enterprise Architecture Foundation", "The Open Group"),
++            new KnownCertification("ITIL 4 Foundation", "PeopleCert"),
++            new KnownCertification("PRINCE2 Foundation", "PeopleCert"),
++            new KnownCertification("PRINCE2 Practitioner", "PeopleCert"),
++            new KnownCertification("APM Project Management Qualification (PMQ)", "Association for Project Management"),
++            new KnownCertification("Project Management Professional (PMP)", "PMI"),
++            new KnownCertification("Professional Scrum Master I (PSM I)", "Scrum.org"),
++            new KnownCertification("Professional Scrum Product Owner I (PSPO I)", "Scrum.org"),
++            new KnownCertification("Certified ScrumMaster (CSM)", "Scrum Alliance"),
++            new KnownCertification("SAFe Agilist", "Scaled Agile"),
++            new KnownCertification("ICAgile Certified Professional (ICP)", "ICAgile"),
++            new KnownCertification("BCS Foundation Certificate in Business Analysis", "BCS"),
++            new KnownCertification("BCS International Diploma in Business Analysis", "BCS"),
++            new KnownCertification("IIBA Certified Business Analysis Professional (CBAP)", "IIBA"),
++            new KnownCertification("IAAP Certified Professional in Accessibility Core Competencies (CPACC)", "IAAP"),
++            new KnownCertification("Nielsen Norman Group UX Certification", "Nielsen Norman Group"),
++            new KnownCertification("Google Data Analytics Professional Certificate", "Google"),
++            new KnownCertification("Databricks Certified Data Engineer Associate", "Databricks"),
++            new KnownCertification("Snowflake SnowPro Core", "Snowflake"),
++            new KnownCertification("DAMA Certified Data Management Professional (CDMP)", "DAMA International"),
++            new KnownCertification("ILM Level 5 Certificate in Coaching and Mentoring", "ILM"),
++            new KnownCertification("MRS Certificate in Market and Social Research", "Market Research Society"));
++
++    private static final Map<String, List<String>> RULES = new LinkedHashMap<>();
++
++    private static void rule(String keyword, String... tags) {
++        RULES.put(keyword, List.of(tags));
++    }
++
++    static {
++        rule("aws", "cloud", "infrastructure");
++        rule("amazon web services", "cloud", "infrastructure");
++        rule("azure", "cloud", "infrastructure");
++        rule("google cloud", "cloud", "infrastructure");
++        rule("gcp", "cloud", "infrastructure");
++        rule("cloud", "cloud", "infrastructure");
++        rule("solutions architect", "architecture", "integration");
++        rule("architect", "architecture");
++        rule("togaf", "architecture", "strategy");
++        rule("developer", "coding", "software-engineering");
++        rule("devops", "devops", "automation");
++        rule("terraform", "infrastructure", "automation", "devops");
++        rule("kubernetes", "infrastructure", "devops", "cloud");
++        rule("docker", "infrastructure", "devops");
++        rule("administrator", "infrastructure", "service-management");
++        rule("security", "security");
++        rule("cissp", "security", "risk");
++        rule("cyber", "security");
++        rule("istqb", "testing");
++        rule("test", "testing");
++        rule("itil", "service-management", "continuous-improvement", "support");
++        rule("prince2", "delivery", "planning", "risk");
++        rule("project management", "delivery", "planning", "finance");
++        rule("pmp", "delivery", "planning", "finance");
++        rule("pmq", "delivery", "planning", "finance");
++        rule("scrum", "agile", "delivery");
++        rule("agile", "agile", "delivery");
++        rule("safe", "agile", "delivery");
++        rule("icagile", "agile", "delivery");
++        rule("kanban", "agile", "process");
++        rule("product owner", "product", "roadmaps", "outcomes");
++        rule("pspo", "product", "roadmaps", "outcomes");
++        rule("business analysis", "business-analysis", "requirements", "modelling");
++        rule("cbap", "business-analysis", "requirements");
++        rule("data engineer", "data-engineering", "data");
++        rule("data analy", "analytics", "data");
++        rule("power bi", "analytics", "data");
++        rule("databricks", "data-engineering", "data");
++        rule("snowflake", "data-engineering", "data");
++        rule("data management", "data-governance", "data");
++        rule("cdmp", "data-governance", "data");
++        rule("data", "data");
++        rule("machine learning", "ai", "data");
++        rule("ai ", "ai");
++        rule("accessib", "accessibility", "inclusion");
++        rule("cpacc", "accessibility", "inclusion");
++        rule("wcag", "accessibility");
++        rule("ux", "interaction-design", "research");
++        rule("user experience", "interaction-design", "research");
++        rule("service design", "service-design");
++        rule("research", "research");
++        rule("coaching", "coaching", "mentoring");
++        rule("mentoring", "coaching", "mentoring");
++        rule("leadership", "leadership", "teams");
++        rule("facilitat", "facilitation", "workshops");
++        rule("change management", "strategy", "stakeholders");
++        rule("lean", "agile", "process", "continuous-improvement");
++        rule("six sigma", "process", "continuous-improvement");
++    }
++
++    /** Topic tags for a certification from its name and issuer. */
++    static Map<String, Integer> tagsFor(String name, String issuer) {
++        String text = (" " + Objects.toString(name, "") + " " + Objects.toString(issuer, "") + " ").toLowerCase(Locale.UK);
++        Map<String, Integer> weights = new HashMap<>();
++        RULES.forEach((kw, tags) -> {
++            if (text.contains(kw)) tags.forEach(t -> weights.merge(t, 1, Integer::sum));
++        });
++        return weights;
++    }
++
++    public record Suggestion(String ref, String name, String type, int score) {}
++
++    /** Framework items this certification probably supports, best match first. */
++    public List<Suggestion> suggest(User user, String name, String issuer) {
++        Map<String, Integer> certTags = tagsFor(name, issuer);
++        List<Suggestion> skills = new ArrayList<>();
++        if (!certTags.isEmpty()) {
++            for (Skill s : candidateSkills(user)) {
++                int score = score(certTags, TagMatcher.tagsFor(s.name(), s.definition()));
++                if (score > 0) skills.add(new Suggestion("SKILL:" + s.id(), s.name(), "SKILL", score));
++            }
++        }
++        skills.sort(Comparator.comparingInt(Suggestion::score).reversed().thenComparing(Suggestion::name));
++        List<Suggestion> out = new ArrayList<>(skills.subList(0, Math.min(MAX_SKILLS, skills.size())));
++
++        // Behaviours and impact areas only when the match is strong, so they don't crowd out skills.
++        List<GradedItem> graded = new ArrayList<>(framework.behaviours());
++        graded.addAll(framework.impacts());
++        for (GradedItem g : graded) {
++            int score = certTags.isEmpty() ? 0 : score(certTags, TagMatcher.tagsFor(g.name(), g.definition()));
++            if (score >= 3) out.add(new Suggestion(g.type() + ":" + g.id(), g.name(), g.type(), score));
++        }
++
++        // Gaining a certification is always a way of developing your craft.
++        framework.findBehaviour("developing-your-craft").ifPresent(b -> {
++            String ref = "BEHAVIOUR:" + b.id();
++            if (out.stream().noneMatch(s -> s.ref().equals(ref))) out.add(new Suggestion(ref, b.name(), "BEHAVIOUR", 1));
++        });
++        return out;
++    }
++
++    private List<Skill> candidateSkills(User user) {
++        Optional<Role> role = framework.findRole(user.getRoleId());
++        if (role.isPresent()) {
++            return role.get().skills().stream().map(RoleSkill::skillId).distinct()
++                    .map(framework::findSkill).flatMap(Optional::stream).toList();
++        }
++        return framework.framework().skills();
++    }
++
++    private static int score(Map<String, Integer> certTags, Map<String, Integer> itemTags) {
++        int score = 0;
++        for (var e : certTags.entrySet()) score += e.getValue() * itemTags.getOrDefault(e.getKey(), 0);
++        return score;
++    }
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/journal/JournalController.java b/backend/src/main/java/com/tpximpact/trainingtool/journal/JournalController.java
+index e9ae63f..003a6d7 100755
+--- a/backend/src/main/java/com/tpximpact/trainingtool/journal/JournalController.java
++++ b/backend/src/main/java/com/tpximpact/trainingtool/journal/JournalController.java
+@@ -1,6 +1,8 @@
+ package com.tpximpact.trainingtool.journal;
+ 
+ import com.tpximpact.trainingtool.ai.AnthropicClient;
++import com.tpximpact.trainingtool.certification.Certification;
++import com.tpximpact.trainingtool.certification.CertificationRepository;
+ import com.tpximpact.trainingtool.common.ApiException;
+ import com.tpximpact.trainingtool.gamification.Activity;
+ import com.tpximpact.trainingtool.gamification.GamificationService;
+@@ -30,9 +32,11 @@ public class JournalController {
+     private final GamificationService gamification;
+     private final ProgressionService progression;
+     private final AnthropicClient ai;
++    private final CertificationRepository certifications;
+ 
+     public JournalController(JournalEntryRepository entries, CurrentUser currentUser, GamificationService gamification,
+-                             ProgressionService progression, AnthropicClient ai) {
++                             ProgressionService progression, AnthropicClient ai, CertificationRepository certifications) {
++        this.certifications = certifications;
+         this.entries = entries;
+         this.currentUser = currentUser;
+         this.gamification = gamification;
+@@ -131,6 +135,19 @@ public class JournalController {
+             if (e.getRefs().isEmpty()) untagged.add(e);
+             e.getRefs().forEach(r -> grouped.computeIfAbsent(r, k -> new ArrayList<>()).add(e));
+         }
++        // Earned certifications achieved by the end of the period sit alongside the journal entries.
++        List<Certification> certs = certifications.findByUserId(me.getId()).stream()
++                .filter(c -> Certification.EARNED.equals(c.getStatus()))
++                .filter(c -> c.getIssuedOn() == null || !c.getIssuedOn().isAfter(end))
++                .sorted(Comparator.comparing(Certification::getIssuedOn, Comparator.nullsLast(Comparator.reverseOrder())))
++                .toList();
++        Map<String, List<Certification>> certsByRef = new HashMap<>();
++        for (Certification c : certs) {
++            c.getRefs().forEach(r -> {
++                certsByRef.computeIfAbsent(r, k -> new ArrayList<>()).add(c);
++                grouped.computeIfAbsent(r, k -> new ArrayList<>());
++            });
++        }
+ 
+         StringBuilder sb = new StringBuilder();
+         sb.append("PROGRESSION ASSESSMENT EVIDENCE - ").append(me.getDisplayName()).append('\n');
+@@ -152,14 +169,16 @@ public class JournalController {
+                 lastSection = section;
+             }
+             String name = progression.refName(group.getKey()).orElse(group.getKey());
++            List<Certification> itemCerts = certsByRef.getOrDefault(group.getKey(), List.of());
+             sb.append(name).append('\n');
+             if (polish) {
+-                Optional<String> summary = summarise(name, group.getValue());
++                Optional<String> summary = summarise(name, group.getValue(), itemCerts);
+                 if (summary.isPresent()) {
+                     sb.append(summary.get().trim()).append("\n\nSupporting examples:\n");
+                     usedAi = true;
+                 }
+             }
++            for (Certification c : itemCerts) sb.append(certBullet(c, false));
+             for (JournalEntry e : group.getValue()) sb.append(bullet(e));
+             sb.append('\n');
+         }
+@@ -167,7 +186,12 @@ public class JournalController {
+             sb.append("== OTHER EVIDENCE ==\n\n");
+             untagged.forEach(e -> sb.append(bullet(e)));
+         }
+-        if (list.isEmpty()) sb.append("No journal entries in this period yet.\n");
++        if (!certs.isEmpty()) {
++            sb.append("== CERTIFICATIONS ==\n\n");
++            certs.forEach(c -> sb.append(certBullet(c, true)));
++            sb.append('\n');
++        }
++        if (list.isEmpty() && certs.isEmpty()) sb.append("No journal entries in this period yet.\n");
+ 
+         gamification.record(me, Activity.JOURNAL_EXPORTED);
+         return new ExportResponse(sb.toString().trim() + "\n", list.size(), usedAi ? "claude" : "plain");
+@@ -180,9 +204,25 @@ public class JournalController {
+         return sb.append('\n').toString();
+     }
+ 
+-    private Optional<String> summarise(String itemName, List<JournalEntry> evidence) {
++    /** One line for a certification. With details, adds the credential ID and verification link. */
++    private String certBullet(Certification c, boolean details) {
++        StringBuilder sb = new StringBuilder("• Certification: ").append(c.getName());
++        if (c.getIssuer() != null) sb.append(" (").append(c.getIssuer()).append(')');
++        if (c.getIssuedOn() != null) sb.append(", achieved ").append(c.getIssuedOn().format(UK_DATE));
++        switch (c.expiry(LocalDate.now())) {
++            case EXPIRED -> sb.append(", expired ").append(c.getExpiresOn().format(UK_DATE));
++            case ACTIVE, EXPIRING_SOON -> sb.append(", valid until ").append(c.getExpiresOn().format(UK_DATE));
++            default -> { }
++        }
++        if (details && c.getCredentialId() != null) sb.append(". Credential ID: ").append(c.getCredentialId());
++        if (details && c.getCredentialUrl() != null) sb.append(". Verify: ").append(c.getCredentialUrl());
++        return sb.append('\n').toString();
++    }
++
++    private Optional<String> summarise(String itemName, List<JournalEntry> evidence, List<Certification> certs) {
+         if (!ai.enabled()) return Optional.empty();
+         StringBuilder sb = new StringBuilder();
++        certs.forEach(c -> sb.append(certBullet(c, false)));
+         evidence.forEach(e -> sb.append(bullet(e)));
+         String system = "You help TPXimpact consultants write their end-of-year progression assessment. "
+                 + "Write in the first person, plain British English, active voice, no jargon. Do not invent facts.";
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/progression/ProgressionService.java b/backend/src/main/java/com/tpximpact/trainingtool/progression/ProgressionService.java
+index 1e0f999..549e08a 100755
+--- a/backend/src/main/java/com/tpximpact/trainingtool/progression/ProgressionService.java
++++ b/backend/src/main/java/com/tpximpact/trainingtool/progression/ProgressionService.java
+@@ -1,5 +1,8 @@
+ package com.tpximpact.trainingtool.progression;
+ 
++import com.tpximpact.trainingtool.certification.Certification;
++import com.tpximpact.trainingtool.certification.CertificationBadge;
++import com.tpximpact.trainingtool.certification.CertificationRepository;
+ import com.tpximpact.trainingtool.common.ApiException;
+ import com.tpximpact.trainingtool.framework.FrameworkModels.*;
+ import com.tpximpact.trainingtool.framework.FrameworkService;
+@@ -8,6 +11,7 @@ import com.tpximpact.trainingtool.progression.SelfAssessment.ItemType;
+ import com.tpximpact.trainingtool.user.User;
+ import org.springframework.stereotype.Service;
+ 
++import java.time.LocalDate;
+ import java.util.*;
+ import java.util.function.Function;
+ import java.util.stream.Collectors;
+@@ -19,12 +23,14 @@ public class ProgressionService {
+     private final FrameworkService framework;
+     private final SelfAssessmentRepository assessments;
+     private final JournalEntryRepository journal;
++    private final CertificationRepository certifications;
+ 
+     public ProgressionService(FrameworkService framework, SelfAssessmentRepository assessments,
+-                              JournalEntryRepository journal) {
++                              JournalEntryRepository journal, CertificationRepository certifications) {
+         this.framework = framework;
+         this.assessments = assessments;
+         this.journal = journal;
++        this.certifications = certifications;
+     }
+ 
+     public enum Status { MET, GAP, NOT_REQUIRED }
+@@ -32,7 +38,7 @@ public class ProgressionService {
+     public record GapItem(String ref, ItemType type, String id, String name, String definition,
+                           String currentExpected, String targetExpected, String selfLevel, boolean selfAssessed,
+                           int gap, Status status, String selfDescriptor, String targetDescriptor,
+-                          String note, long evidenceCount) {}
++                          String note, long evidenceCount, List<CertificationBadge> certifications) {}
+ 
+     public record Summary(int required, int met, int gaps, int readinessPercent, int assessed, int totalItems,
+                           int skillGaps, int behaviourGaps, int impactGaps) {}
+@@ -56,6 +62,7 @@ public class ProgressionService {
+         Map<String, Long> evidence = new HashMap<>();
+         journal.findByUserIdOrderByEntryDateDescIdDesc(user.getId())
+                 .forEach(e -> e.getRefs().forEach(r -> evidence.merge(r, 1L, Long::sum)));
++        Map<String, List<CertificationBadge>> certs = certificationsByRef(user.getId());
+ 
+         List<GapItem> skills = new ArrayList<>();
+         for (RoleSkill rs : role.skills()) {
+@@ -71,11 +78,11 @@ public class ProgressionService {
+             Status status = tgtExp == null ? Status.NOT_REQUIRED : gap > 0 ? Status.GAP : Status.MET;
+             skills.add(new GapItem(ref, ItemType.SKILL, s.id(), s.name(), s.definition(), curExp, tgtExp, self,
+                     sa != null, gap, status, descriptor(s.levels(), self), descriptor(s.levels(), tgtExp),
+-                    sa == null ? null : sa.getNote(), evidence.getOrDefault(ref, 0L)));
++                    sa == null ? null : sa.getNote(), evidence.getOrDefault(ref, 0L), certs.getOrDefault(ref, List.of())));
+         }
+ 
+-        List<GapItem> behaviours = graded(framework.behaviours(), ItemType.BEHAVIOUR, current, target, mine, evidence);
+-        List<GapItem> impacts = graded(framework.impacts(), ItemType.IMPACT, current, target, mine, evidence);
++        List<GapItem> behaviours = graded(framework.behaviours(), ItemType.BEHAVIOUR, current, target, mine, evidence, certs);
++        List<GapItem> impacts = graded(framework.impacts(), ItemType.IMPACT, current, target, mine, evidence, certs);
+ 
+         List<GapItem> all = new ArrayList<>();
+         all.addAll(skills);
+@@ -94,7 +101,8 @@ public class ProgressionService {
+     }
+ 
+     private List<GapItem> graded(List<GradedItem> items, ItemType type, String current, String target,
+-                                 Map<String, SelfAssessment> mine, Map<String, Long> evidence) {
++                                 Map<String, SelfAssessment> mine, Map<String, Long> evidence,
++                                 Map<String, List<CertificationBadge>> certs) {
+         List<GapItem> out = new ArrayList<>();
+         for (GradedItem g : items) {
+             String ref = type + ":" + g.id();
+@@ -108,11 +116,23 @@ public class ProgressionService {
+             Status status = !required ? Status.NOT_REQUIRED : gap > 0 ? Status.GAP : Status.MET;
+             out.add(new GapItem(ref, type, g.id(), g.name(), g.definition(), framework.grade(current).name(),
+                     framework.grade(target).name(), self, sa != null, gap, status, g.levels().get(self), tgtText,
+-                    sa == null ? null : sa.getNote(), evidence.getOrDefault(ref, 0L)));
++                    sa == null ? null : sa.getNote(), evidence.getOrDefault(ref, 0L), certs.getOrDefault(ref, List.of())));
+         }
+         return out;
+     }
+ 
++    /** Each framework ref mapped to the certifications tagged against it. */
++    public Map<String, List<CertificationBadge>> certificationsByRef(Long userId) {
++        LocalDate today = LocalDate.now();
++        Map<String, List<CertificationBadge>> out = new HashMap<>();
++        certifications.findByUserId(userId).stream()
++                .sorted(Comparator.comparing((Certification c) -> !c.isCurrent(today))
++                        .thenComparing(c -> c.getName().toLowerCase(Locale.UK)))
++                .forEach(c -> c.getRefs().forEach(r ->
++                        out.computeIfAbsent(r, k -> new ArrayList<>()).add(CertificationBadge.of(c, today))));
++        return out;
++    }
++
+     private static int countGaps(List<GapItem> items) {
+         return (int) items.stream().filter(i -> i.status() == Status.GAP).count();
+     }
+diff --git a/backend/src/test/java/com/tpximpact/trainingtool/CertificationApiTest.java b/backend/src/test/java/com/tpximpact/trainingtool/CertificationApiTest.java
+new file mode 100644
+index 0000000..0b22b65
+--- /dev/null
++++ b/backend/src/test/java/com/tpximpact/trainingtool/CertificationApiTest.java
+@@ -0,0 +1,117 @@
++package com.tpximpact.trainingtool;
++
++import com.fasterxml.jackson.databind.JsonNode;
++import com.fasterxml.jackson.databind.ObjectMapper;
++import com.fasterxml.jackson.databind.node.ArrayNode;
++import com.fasterxml.jackson.databind.node.ObjectNode;
++import org.junit.jupiter.api.Test;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
++import org.springframework.boot.test.context.SpringBootTest;
++import org.springframework.http.MediaType;
++import org.springframework.test.web.servlet.MockMvc;
++import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
++
++import java.time.LocalDate;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.stream.StreamSupport;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
++
++@SpringBootTest(properties = "app.seed-demo-data=false")
++@AutoConfigureMockMvc
++class CertificationApiTest {
++
++    @Autowired MockMvc mvc;
++    @Autowired ObjectMapper mapper;
++
++    private String register(String email) throws Exception {
++        String body = mvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
++                        .content("{\"email\":\"" + email + "\",\"password\":\"password123\",\"displayName\":\"Cert Person\"}"))
++                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
++        String token = mapper.readTree(body).get("token").asText();
++        mvc.perform(put("/api/me").header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
++                        .content("{\"roleId\":\"software-engineer\",\"currentGrade\":\"G8\",\"targetGrade\":\"G9\"}"))
++                .andExpect(status().isOk());
++        return token;
++    }
++
++    private JsonNode call(String token, MockHttpServletRequestBuilder b, int status) throws Exception {
++        String body = mvc.perform(b.header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON))
++                .andExpect(status().is(status)).andReturn().getResponse().getContentAsString();
++        return body.isEmpty() ? null : mapper.readTree(body);
++    }
++
++    @Test
++    void certificationsNeedToken() throws Exception {
++        mvc.perform(get("/api/certifications")).andExpect(status().isUnauthorized());
++    }
++
++    @Test
++    void addCertificationAndSeeItInGapAnalysisAndExport() throws Exception {
++        String token = register("certs@example.com");
++
++        JsonNode known = call(token, get("/api/certifications/known"), 200);
++        assertThat(known.size()).isGreaterThan(20);
++
++        String name = "AWS Certified Developer - Associate";
++        JsonNode suggestions = call(token, post("/api/certifications/suggest")
++                .content("{\"name\":\"" + name + "\",\"issuer\":\"Amazon Web Services\"}"), 200);
++        List<String> refs = new ArrayList<>();
++        suggestions.forEach(s -> refs.add(s.get("ref").asText()));
++        assertThat(refs).contains("BEHAVIOUR:developing-your-craft");
++        assertThat(refs).anyMatch(r -> r.startsWith("SKILL:"));
++
++        ObjectNode input = mapper.createObjectNode()
++                .put("name", name).put("issuer", "Amazon Web Services").put("status", "EARNED")
++                .put("credentialId", "ABC-123").put("credentialUrl", "https://aws.amazon.com/verification")
++                .put("issuedOn", "2025-03-01").put("expiresOn", LocalDate.now().plusYears(2).toString());
++        ArrayNode refArray = input.putArray("refs");
++        refs.forEach(refArray::add);
++        refArray.add("SKILL:not-a-real-skill");
++
++        JsonNode created = call(token, post("/api/certifications").content(input.toString()), 201);
++        assertThat(created.get("expiry").asText()).isEqualTo("ACTIVE");
++        assertThat(created.get("refs").size()).as("unknown refs are dropped").isEqualTo(refs.size());
++        long id = created.get("id").asLong();
++
++        // Shows next to the matching items in gap analysis.
++        JsonNode gap = call(token, get("/api/progression/gap"), 200);
++        List<JsonNode> all = new ArrayList<>();
++        for (String section : List.of("skills", "behaviours", "impacts")) gap.get(section).forEach(all::add);
++        JsonNode tagged = all.stream().filter(i -> refs.contains(i.get("ref").asText())).findFirst().orElseThrow();
++        assertThat(tagged.get("certifications").get(0).get("name").asText()).isEqualTo(name);
++        assertThat(all.stream().filter(i -> !refs.contains(i.get("ref").asText()))
++                .allMatch(i -> i.get("certifications").isEmpty())).isTrue();
++
++        // And in the evidence export.
++        JsonNode export = call(token, get("/api/journal/export"), 200);
++        String text = export.get("text").asText();
++        assertThat(text).contains("Certification: " + name);
++        assertThat(text).contains("== CERTIFICATIONS ==").contains("Credential ID: ABC-123");
++
++        // Validation.
++        call(token, post("/api/certifications").content("{\"name\":\"X\",\"credentialUrl\":\"javascript:alert(1)\"}"), 400);
++        call(token, post("/api/certifications").content("{\"name\":\"X\",\"issuedOn\":\"2025-01-01\",\"expiresOn\":\"2024-01-01\"}"), 400);
++        call(token, post("/api/certifications").content("{\"name\":\"X\",\"status\":\"MAYBE\"}"), 400);
++
++        // In progress, with an expired one sorted last.
++        call(token, post("/api/certifications").content("{\"name\":\"CISSP\",\"status\":\"IN_PROGRESS\"}"), 201);
++        call(token, post("/api/certifications").content("{\"name\":\"Old cert\",\"issuedOn\":\"2019-01-01\",\"expiresOn\":\"2022-01-01\"}"), 201);
++        JsonNode list = call(token, get("/api/certifications"), 200);
++        assertThat(list.size()).isEqualTo(3);
++        assertThat(list.get(0).get("status").asText()).isEqualTo("IN_PROGRESS");
++        assertThat(list.get(2).get("expiry").asText()).isEqualTo("EXPIRED");
++        assertThat(StreamSupport.stream(list.spliterator(), false).map(c -> c.get("name").asText())).contains(name);
++
++        // Other people can't touch it.
++        String other = register("other-certs@example.com");
++        call(other, delete("/api/certifications/" + id), 403);
++
++        call(token, delete("/api/certifications/" + id), 204);
++        assertThat(call(token, get("/api/certifications"), 200).size()).isEqualTo(2);
++    }
++}
+diff --git a/frontend/app/certifications/page.tsx b/frontend/app/certifications/page.tsx
+new file mode 100644
+index 0000000..cc7f604
+--- /dev/null
++++ b/frontend/app/certifications/page.tsx
+@@ -0,0 +1,380 @@
++'use client';
++
++import Link from 'next/link';
++import { useEffect, useMemo, useRef, useState } from 'react';
++import { AppShell } from '@/components/AppShell';
++import { ErrorBox, Loading, Modal } from '@/components/ui';
++import { del, get, post, put } from '@/lib/api';
++import { itemTypeLabel, ukDate } from '@/lib/format';
++import type { Certification, CertificationStatus, CertificationSuggestion, GapReport, KnownCertification } from '@/lib/types';
++
++type Option = { ref: string; name: string; type: string };
++type Draft = Partial<Certification> & { refList?: string[] };
++
++export default function CertificationsPage() {
++  return (
++    <AppShell>
++      <Certifications />
++    </AppShell>
++  );
++}
++
++function Certifications() {
++  const [certs, setCerts] = useState<Certification[] | null>(null);
++  const [options, setOptions] = useState<Option[]>([]);
++  const [known, setKnown] = useState<KnownCertification[]>([]);
++  const [editing, setEditing] = useState<Draft | null>(null);
++
++  const load = () => get<Certification[]>('/certifications').then(setCerts);
++
++  useEffect(() => {
++    load();
++    get<KnownCertification[]>('/certifications/known').then(setKnown).catch(() => {});
++    get<GapReport>('/progression/gap')
++      .then((r) => setOptions([...r.skills, ...r.behaviours, ...r.impacts].map((i) => ({ ref: i.ref, name: i.name, type: i.type }))))
++      .catch(() => {});
++    const params = new URLSearchParams(window.location.search);
++    if (params.get('new')) setEditing({ refList: params.get('ref') ? [params.get('ref')!] : [] });
++  }, []);
++
++  // Scroll to #cert-<id> once the list has loaded (links from gap analysis and the journal).
++  useEffect(() => {
++    if (!certs || !window.location.hash) return;
++    document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: 'center' });
++  }, [certs]);
++
++  const earned = certs?.filter((c) => c.status === 'EARNED' && c.expiry !== 'EXPIRED').length ?? 0;
++  const working = certs?.filter((c) => c.status === 'IN_PROGRESS').length ?? 0;
++  const expiring = certs?.filter((c) => c.status === 'EARNED' && c.expiry === 'EXPIRING_SOON').length ?? 0;
++
++  return (
++    <>
++      <div className="page-head">
++        <div>
++          <h1>Certifications</h1>
++          <p className="subtitle">
++            List the certifications you hold or are working towards. They show up next to the skills they support in your gap analysis and evidence journal.
++          </p>
++        </div>
++        <button className="btn blue" onClick={() => setEditing({ refList: [], status: 'EARNED' })}>
++          + Add certification
++        </button>
++      </div>
++
++      {certs && certs.length > 0 && (
++        <div className="grid grid-3" style={{ marginBottom: '1rem' }}>
++          <div className="card bg-mint stat">
++            <span className="num">{earned}</span>
++            <span className="lbl">Current certifications</span>
++          </div>
++          <div className="card bg-blue stat">
++            <span className="num">{working}</span>
++            <span className="lbl">Working towards</span>
++          </div>
++          <div className={`card stat ${expiring ? 'bg-pink' : 'bg-lilac'}`}>
++            <span className="num">{expiring}</span>
++            <span className="lbl">Expiring in the next 90 days</span>
++          </div>
++        </div>
++      )}
++
++      {!certs ? (
++        <Loading />
++      ) : certs.length === 0 ? (
++        <div className="card empty">
++          <h2>No certifications yet</h2>
++          <p>AWS, Azure, PRINCE2, Scrum, ISTQB, BCS… add any you hold, or one you&apos;re studying for. We&apos;ll suggest which skills each one supports.</p>
++          <button className="btn blue" onClick={() => setEditing({ refList: [], status: 'EARNED' })}>
++            Add my first certification
++          </button>
++        </div>
++      ) : (
++        <div className="list">
++          {certs.map((c) => (
++            <article key={c.id} id={`cert-${c.id}`} className={`card cert-card${c.expiry === 'EXPIRED' ? ' expired' : ''}`}>
++              <div className="row between" style={{ alignItems: 'flex-start' }}>
++                <div className="row" style={{ alignItems: 'flex-start', flex: 1, minWidth: 240 }}>
++                  <span className="cert-icon" aria-hidden>
++                    📜
++                  </span>
++                  <div style={{ flex: 1, minWidth: 0 }}>
++                    <div className="row" style={{ gap: '0.4rem' }}>
++                      <h3 style={{ margin: 0, color: 'var(--black)' }}>{c.name}</h3>
++                      <StatusChip cert={c} />
++                    </div>
++                    <div className="cert-meta">
++                      {c.issuer && <span>{c.issuer}</span>}
++                      {c.issuedOn && <span>{c.status === 'IN_PROGRESS' ? 'Started' : 'Achieved'} {ukDate(c.issuedOn)}</span>}
++                      {c.expiresOn && <span>{c.expiry === 'EXPIRED' ? 'Expired' : 'Valid until'} {ukDate(c.expiresOn)}</span>}
++                      {c.credentialId && <span>ID: {c.credentialId}</span>}
++                      {c.credentialUrl && (
++                        <a href={c.credentialUrl} target="_blank" rel="noreferrer">
++                          Verify ↗
++                        </a>
++                      )}
++                    </div>
++                  </div>
++                </div>
++                <div className="row" style={{ gap: '0.25rem' }}>
++                  <button className="btn ghost small" onClick={() => setEditing({ ...c, refList: c.refs.map((r) => r.ref) })}>
++                    Edit
++                  </button>
++                  <button
++                    className="btn ghost small"
++                    onClick={async () => {
++                      if (window.confirm(`Delete ${c.name}?`)) {
++                        await del(`/certifications/${c.id}`);
++                        load();
++                      }
++                    }}
++                  >
++                    Delete
++                  </button>
++                </div>
++              </div>
++              {c.notes && <p className="small" style={{ margin: '0 0 0.5rem', whiteSpace: 'pre-wrap' }}>{c.notes}</p>}
++              {c.refs.length > 0 ? (
++                <div className="row" style={{ gap: '0.35rem' }}>
++                  <span className="xs muted">Supports:</span>
++                  {c.refs.map((r) => (
++                    <span key={r.ref} className={`chip ${r.ref.startsWith('SKILL') ? 'blue' : r.ref.startsWith('BEHAVIOUR') ? 'lilac' : 'pink'}`}>
++                      {r.name}
++                    </span>
++                  ))}
++                </div>
++              ) : (
++                <p className="xs muted" style={{ margin: 0 }}>
++                  Not linked to any skills yet, so it won&apos;t show in gap analysis.{' '}
++                  <button className="linkish" onClick={() => setEditing({ ...c, refList: [] })}>
++                    Link it
++                  </button>
++                </p>
++              )}
++            </article>
++          ))}
++        </div>
++      )}
++
++      <p className="small muted mt">
++        Certifications appear next to matching items in <Link href="/progression">Gap analysis</Link> and the <Link href="/journal">Evidence journal</Link>, and in
++        your evidence export.
++      </p>
++
++      {editing && (
++        <CertificationForm
++          initial={editing}
++          options={options}
++          known={known}
++          onClose={() => setEditing(null)}
++          onSaved={() => {
++            setEditing(null);
++            load();
++          }}
++        />
++      )}
++    </>
++  );
++}
++
++function StatusChip({ cert }: { cert: Certification }) {
++  if (cert.status === 'IN_PROGRESS') return <span className="chip outline">📚 Working towards</span>;
++  if (cert.expiry === 'EXPIRED') return <span className="chip">Expired</span>;
++  if (cert.expiry === 'EXPIRING_SOON') return <span className="chip pink">⚠ Expiring soon</span>;
++  return <span className="chip mint">✓ Current</span>;
++}
++
++function CertificationForm({
++  initial,
++  options,
++  known,
++  onClose,
++  onSaved,
++}: {
++  initial: Draft;
++  options: Option[];
++  known: KnownCertification[];
++  onClose: () => void;
++  onSaved: () => void;
++}) {
++  const [name, setName] = useState(initial.name || '');
++  const [issuer, setIssuer] = useState(initial.issuer || '');
++  const [status, setStatus] = useState<CertificationStatus>(initial.status || 'EARNED');
++  const [issuedOn, setIssuedOn] = useState(initial.issuedOn || '');
++  const [expiresOn, setExpiresOn] = useState(initial.expiresOn || '');
++  const [credentialId, setCredentialId] = useState(initial.credentialId || '');
++  const [credentialUrl, setCredentialUrl] = useState(initial.credentialUrl || '');
++  const [notes, setNotes] = useState(initial.notes || '');
++  const [refs, setRefs] = useState<string[]>(initial.refList || []);
++  const [suggested, setSuggested] = useState<CertificationSuggestion[]>([]);
++  const [suggesting, setSuggesting] = useState(false);
++  const [search, setSearch] = useState('');
++  const [error, setError] = useState<string | null>(null);
++  const [busy, setBusy] = useState(false);
++  // Auto-apply suggestions to new certifications until the person picks items themselves.
++  const touched = useRef(Boolean(initial.id) || (initial.refList?.length ?? 0) > 0);
++
++  const suggest = async (apply: boolean) => {
++    if (!name.trim()) return;
++    setSuggesting(true);
++    try {
++      const s = await post<CertificationSuggestion[]>('/certifications/suggest', { name, issuer });
++      setSuggested(s);
++      if (apply) setRefs((r) => Array.from(new Set([...r, ...s.map((x) => x.ref)])));
++    } catch {
++      /* suggestions are optional */
++    } finally {
++      setSuggesting(false);
++    }
++  };
++
++  useEffect(() => {
++    if (!name.trim()) return;
++    const t = setTimeout(() => suggest(!touched.current), 600);
++    return () => clearTimeout(t);
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [name, issuer]);
++
++  const pickName = (value: string) => {
++    setName(value);
++    const match = known.find((k) => k.name === value);
++    if (match && !issuer) setIssuer(match.issuer);
++  };
++
++  const toggle = (ref: string) => {
++    touched.current = true;
++    setRefs((r) => (r.includes(ref) ? r.filter((x) => x !== ref) : [...r, ref]));
++  };
++
++  const submit = async (e: React.FormEvent) => {
++    e.preventDefault();
++    setBusy(true);
++    setError(null);
++    const payload = { name, issuer, status, issuedOn: issuedOn || null, expiresOn: expiresOn || null, credentialId, credentialUrl, notes, refs };
++    try {
++      if (initial.id) await put(`/certifications/${initial.id}`, payload);
++      else await post('/certifications', payload);
++      onSaved();
++    } catch (err) {
++      setError((err as Error).message);
++    } finally {
++      setBusy(false);
++    }
++  };
++
++  const suggestedRefs = useMemo(() => new Set(suggested.map((s) => s.ref)), [suggested]);
++  // Items outside your role (e.g. suggested for someone not yet onboarded) still need to be pickable.
++  const allOptions = useMemo(() => {
++    const extra = suggested.filter((s) => !options.some((o) => o.ref === s.ref)).map((s) => ({ ref: s.ref, name: s.name, type: s.type }));
++    return [...options, ...extra];
++  }, [options, suggested]);
++  const groups = ['SKILL', 'BEHAVIOUR', 'IMPACT'];
++
++  return (
++    <Modal title={initial.id ? 'Edit certification' : 'Add a certification'} onClose={onClose}>
++      <form onSubmit={submit}>
++        <ErrorBox error={error} />
++        <div className="field">
++          <label htmlFor="cn">Certification</label>
++          <input id="cn" type="text" list="known-certs" value={name} onChange={(e) => pickName(e.target.value)} required maxLength={200} placeholder="e.g. AWS Certified Solutions Architect - Associate" />
++          <datalist id="known-certs">
++            {known.map((k) => (
++              <option key={k.name} value={k.name}>
++                {k.issuer}
++              </option>
++            ))}
++          </datalist>
++        </div>
++        <div className="grid grid-2">
++          <div className="field">
++            <label htmlFor="ci">Issuer</label>
++            <input id="ci" type="text" value={issuer} onChange={(e) => setIssuer(e.target.value)} maxLength={120} placeholder="e.g. Amazon Web Services" />
++          </div>
++          <div className="field">
++            <label>Status</label>
++            <div className="seg" role="radiogroup" aria-label="Status">
++              {(
++                [
++                  ['EARNED', '✓ Earned'],
++                  ['IN_PROGRESS', '📚 Working towards'],
++                ] as [CertificationStatus, string][]
++              ).map(([k, l]) => (
++                <button type="button" key={k} role="radio" aria-checked={status === k} className={status === k ? 'active' : ''} onClick={() => setStatus(k)}>
++                  {l}
++                </button>
++              ))}
++            </div>
++          </div>
++        </div>
++        <div className="grid grid-2">
++          <div className="field">
++            <label htmlFor="cd">{status === 'IN_PROGRESS' ? 'Started (optional)' : 'Date achieved'}</label>
++            <input id="cd" type="date" value={issuedOn} onChange={(e) => setIssuedOn(e.target.value)} />
++          </div>
++          <div className="field">
++            <label htmlFor="ce">Expires (optional)</label>
++            <input id="ce" type="date" value={expiresOn} onChange={(e) => setExpiresOn(e.target.value)} min={issuedOn || undefined} />
++          </div>
++        </div>
++        <div className="grid grid-2">
++          <div className="field">
++            <label htmlFor="cid">Credential ID (optional)</label>
++            <input id="cid" type="text" value={credentialId} onChange={(e) => setCredentialId(e.target.value)} maxLength={120} />
++          </div>
++          <div className="field">
++            <label htmlFor="cu">Verification link (optional)</label>
++            <input id="cu" type="url" value={credentialUrl} onChange={(e) => setCredentialUrl(e.target.value)} maxLength={500} placeholder="https://" />
++          </div>
++        </div>
++        <div className="field">
++          <label htmlFor="cno">Notes (optional)</label>
++          <textarea id="cno" value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={1000} style={{ minHeight: 60 }} placeholder="What you learned, or how you've used it on projects." />
++        </div>
++        <div className="field">
++          <div className="row between">
++            <label style={{ margin: 0 }}>Which parts of the framework does it support?</label>
++            <button type="button" className="btn secondary small" onClick={() => suggest(true)} disabled={!name.trim() || suggesting}>
++              {suggesting ? 'Thinking…' : '✨ Suggest'}
++            </button>
++          </div>
++          <div className="hint" style={{ marginBottom: '0.5rem' }}>
++            {suggested.length > 0 ? 'Items marked ✨ match this certification. Tap any item to add or remove it.' : 'Type the certification name and we’ll suggest matching items.'}
++          </div>
++          <input type="search" placeholder="Filter…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ marginBottom: '0.5rem' }} aria-label="Filter framework items" />
++          {groups.map((g) => {
++            const list = allOptions
++              .filter((o) => o.type === g && (!search || o.name.toLowerCase().includes(search.toLowerCase())))
++              .sort((a, b) => Number(suggestedRefs.has(b.ref)) - Number(suggestedRefs.has(a.ref)));
++            if (!list.length) return null;
++            return (
++              <div key={g} style={{ marginBottom: '0.5rem' }}>
++                <div className="xs muted">{itemTypeLabel[g]?.toUpperCase()}</div>
++                <div className="row" style={{ gap: '0.3rem' }}>
++                  {list.map((o) => (
++                    <button
++                      type="button"
++                      key={o.ref}
++                      className={`chip${refs.includes(o.ref) ? ' selected' : ''}${suggestedRefs.has(o.ref) ? ' suggested' : ''}`}
++                      onClick={() => toggle(o.ref)}
++                      aria-pressed={refs.includes(o.ref)}
++                    >
++                      {refs.includes(o.ref) ? '✓ ' : suggestedRefs.has(o.ref) ? '✨ ' : ''}
++                      {o.name}
++                    </button>
++                  ))}
++                </div>
++              </div>
++            );
++          })}
++        </div>
++        <div className="row" style={{ justifyContent: 'flex-end' }}>
++          <button type="button" className="btn secondary" onClick={onClose}>
++            Cancel
++          </button>
++          <button className="btn blue" disabled={busy}>
++            {busy ? 'Saving…' : 'Save certification'}
++          </button>
++        </div>
++      </form>
++    </Modal>
++  );
++}
+diff --git a/frontend/app/globals.css b/frontend/app/globals.css
+index 2675592..3fdced0 100755
+--- a/frontend/app/globals.css
++++ b/frontend/app/globals.css
+@@ -301,3 +301,18 @@ table.board tr.me td { background: var(--pastel-blue); }
+ @media (prefers-reduced-motion: reduce) {
+   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+ }
++
++/* ---------- certifications ---------- */
++.chip.cert-chip { background: #fff3c4; color: var(--black); text-decoration: none; border: 1.5px solid #e0c35c; }
++.chip.cert-chip:hover { border-color: var(--black); }
++.chip.cert-chip.in-progress { background: var(--white); border-style: dashed; }
++.chip.cert-chip.expiring { border-color: var(--danger); }
++.chip.cert-chip.expired { background: var(--grey-100); border-color: var(--grey-300); color: var(--grey-600); text-decoration: line-through; }
++.cert-card { scroll-margin-top: 1.5rem; }
++.cert-card:target { outline: 3px solid var(--blue); outline-offset: 2px; }
++.cert-card.expired { opacity: 0.75; }
++.cert-card .cert-icon { font-size: 2rem; line-height: 1; width: 52px; height: 52px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: #fff3c4; border: 2px solid var(--black); flex-shrink: 0; }
++.cert-meta { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-size: 0.85rem; color: var(--grey-600); margin: 0.25rem 0 0.5rem; }
++.cert-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
++.chip.suggested { box-shadow: 0 0 0 2px #e0c35c inset; }
++.linkish { background: none; border: none; padding: 0; color: var(--blue); text-decoration: underline; cursor: pointer; font-weight: 600; font: inherit; }
+diff --git a/frontend/app/journal/page.tsx b/frontend/app/journal/page.tsx
+index 11a2b87..8e7f548 100755
+--- a/frontend/app/journal/page.tsx
++++ b/frontend/app/journal/page.tsx
+@@ -1,14 +1,25 @@
+ 'use client';
+ 
+ import { useEffect, useMemo, useState } from 'react';
++import Link from 'next/link';
+ import { AppShell } from '@/components/AppShell';
++import { CertBadges } from '@/components/CertBadges';
+ import { ErrorBox, Loading, Modal } from '@/components/ui';
+ import { del, get, post, put } from '@/lib/api';
+ import { itemTypeLabel, ukDate } from '@/lib/format';
+-import type { GapReport, JournalEntry } from '@/lib/types';
++import type { Certification, CertificationBadge, GapReport, JournalEntry } from '@/lib/types';
+ 
+ type Option = { ref: string; name: string; type: string };
+ 
++const badge = (c: Certification): CertificationBadge => ({ id: c.id, name: c.name, issuer: c.issuer, status: c.status, expiry: c.expiry, expiresOn: c.expiresOn });
++
++/** Certifications tagged to any of the given refs, without duplicates. */
++function certsFor(byRef: Map<string, CertificationBadge[]>, refs: string[]): CertificationBadge[] {
++  const seen = new Map<number, CertificationBadge>();
++  refs.forEach((r) => (byRef.get(r) || []).forEach((c) => seen.set(c.id, c)));
++  return [...seen.values()];
++}
++
+ export default function JournalPage() {
+   return (
+     <AppShell>
+@@ -23,11 +34,13 @@ function Journal() {
+   const [editing, setEditing] = useState<Partial<JournalEntry> & { refList?: string[] } | null>(null);
+   const [exporting, setExporting] = useState(false);
+   const [filter, setFilter] = useState('');
++  const [certs, setCerts] = useState<Certification[]>([]);
+ 
+   const load = () => get<JournalEntry[]>('/journal').then(setEntries);
+ 
+   useEffect(() => {
+     load();
++    get<Certification[]>('/certifications').then(setCerts).catch(() => {});
+     get<GapReport>('/progression/gap')
+       .then((r) => setOptions([...r.skills, ...r.behaviours, ...r.impacts].map((i) => ({ ref: i.ref, name: i.name, type: i.type }))))
+       .catch(() => {});
+@@ -36,11 +49,20 @@ function Journal() {
+   }, []);
+ 
+   const shown = useMemo(() => (entries || []).filter((e) => !filter || e.refs.some((r) => r.ref === filter)), [entries, filter]);
++  const certsByRef = useMemo(() => {
++    const m = new Map<string, CertificationBadge[]>();
++    certs.forEach((c) => c.refs.forEach((r) => m.set(r.ref, [...(m.get(r.ref) || []), badge(c)])));
++    return m;
++  }, [certs]);
+   const usedRefs = useMemo(() => {
+     const m = new Map<string, string>();
+     (entries || []).forEach((e) => e.refs.forEach((r) => m.set(r.ref, r.name)));
++    certs.forEach((c) => c.refs.forEach((r) => m.set(r.ref, r.name)));
+     return [...m.entries()];
+-  }, [entries]);
++  }, [entries, certs]);
++  const filterName = usedRefs.find(([ref]) => ref === filter)?.[1];
++  const filterCerts = filter ? certsFor(certsByRef, [filter]) : [];
++  const currentCerts = certs.filter((c) => c.status === 'EARNED' && c.expiry !== 'EXPIRED').map(badge);
+ 
+   return (
+     <>
+@@ -72,6 +94,24 @@ function Journal() {
+         </div>
+       )}
+ 
++      {filter && filterCerts.length > 0 && (
++        <div className="card flat cert-strip" style={{ marginBottom: '1rem' }}>
++          <strong className="small">📜 Certifications for {filterName}:</strong>
++          <CertBadges certs={filterCerts} />
++        </div>
++      )}
++      {!filter && certs.length > 0 && (
++        <div className="card flat cert-strip" style={{ marginBottom: '1rem' }}>
++          <strong className="small">
++            📜 {currentCerts.length} current certification{currentCerts.length === 1 ? '' : 's'} back up your evidence:
++          </strong>
++          <CertBadges certs={currentCerts} compact />
++          <Link href="/certifications" className="small">
++            Manage
++          </Link>
++        </div>
++      )}
++
+       {!entries ? (
+         <Loading />
+       ) : shown.length === 0 ? (
+@@ -121,6 +161,7 @@ function Journal() {
+                     {r.name}
+                   </span>
+                 ))}
++                <CertBadges certs={certsFor(certsByRef, e.refs.map((r) => r.ref))} compact />
+               </div>
+             </article>
+           ))}
+@@ -131,6 +172,7 @@ function Journal() {
+         <EntryForm
+           initial={editing}
+           options={options}
++          certsByRef={certsByRef}
+           onClose={() => setEditing(null)}
+           onSaved={() => {
+             setEditing(null);
+@@ -146,11 +188,13 @@ function Journal() {
+ function EntryForm({
+   initial,
+   options,
++  certsByRef,
+   onClose,
+   onSaved,
+ }: {
+   initial: Partial<JournalEntry> & { refList?: string[] };
+   options: Option[];
++  certsByRef: Map<string, CertificationBadge[]>;
+   onClose: () => void;
+   onSaved: () => void;
+ }) {
+@@ -224,6 +268,12 @@ function EntryForm({
+               </div>
+             );
+           })}
++          {certsFor(certsByRef, refs).length > 0 && (
++            <div className="cert-strip mt">
++              <span className="xs muted">Your certifications for these items:</span>
++              <CertBadges certs={certsFor(certsByRef, refs)} compact />
++            </div>
++          )}
+         </div>
+         <div className="row" style={{ justifyContent: 'flex-end' }}>
+           <button type="button" className="btn secondary" onClick={onClose}>
+@@ -295,7 +345,7 @@ function ExportModal({ onClose }: { onClose: () => void }) {
+ 
+   return (
+     <Modal title="Export for your assessment" onClose={onClose}>
+-      <p className="small">Your evidence, grouped by skill, behaviour and impact, ready to paste into your progression assessment.</p>
++      <p className="small">Your evidence and certifications, grouped by skill, behaviour and impact, ready to paste into your progression assessment.</p>
+       <div className="grid grid-2">
+         <div className="field">
+           <label htmlFor="f">From (optional)</label>
+diff --git a/frontend/app/progression/page.tsx b/frontend/app/progression/page.tsx
+index 695942f..e211f6d 100755
+--- a/frontend/app/progression/page.tsx
++++ b/frontend/app/progression/page.tsx
+@@ -2,6 +2,7 @@
+ 
+ import Link from 'next/link';
+ import { useEffect, useMemo, useState } from 'react';
++import { CertBadges } from '@/components/CertBadges';
+ import { AppShell } from '@/components/AppShell';
+ import { Descriptor, ErrorBox, Loading, Ring } from '@/components/ui';
+ import { get, put } from '@/lib/api';
+@@ -250,7 +251,9 @@ function GapCard({ item, report, edit, onEdit }: { item: GapItem; report: GapRep
+         <span className="chip blue">
+           📝 {item.evidenceCount} piece{item.evidenceCount === 1 ? '' : 's'} of evidence
+         </span>
++        <CertBadges certs={item.certifications || []} />
+         <Link href={`/journal?new=1&ref=${encodeURIComponent(item.ref)}`}>+ Add evidence</Link>
++        {!(item.certifications || []).length && <Link href={`/certifications?new=1&ref=${encodeURIComponent(item.ref)}`}>+ Add certification</Link>}
+         <Link href={`/library?q=${encodeURIComponent(item.name.replace(/\(.*\)/, '').trim())}`}>Find training</Link>
+       </div>
+     </div>
+diff --git a/frontend/components/AppShell.tsx b/frontend/components/AppShell.tsx
+index 687190f..5a69438 100755
+--- a/frontend/components/AppShell.tsx
++++ b/frontend/components/AppShell.tsx
+@@ -16,6 +16,7 @@ const NAV = [
+   { section: 'Record' },
+   { href: '/journal', label: 'Evidence journal', ico: '📝' },
+   { href: '/learning', label: 'Learning log', ico: '🎓' },
++  { href: '/certifications', label: 'Certifications', ico: '📜' },
+   { section: 'Together' },
+   { href: '/community', label: 'Community', ico: '💬' },
+   { href: '/leaderboard', label: 'Leaderboard', ico: '🏆' },
+diff --git a/frontend/components/CertBadges.tsx b/frontend/components/CertBadges.tsx
+new file mode 100644
+index 0000000..100452f
+--- /dev/null
++++ b/frontend/components/CertBadges.tsx
+@@ -0,0 +1,39 @@
++'use client';
++
++import Link from 'next/link';
++import { ukDate } from '@/lib/format';
++import type { CertificationBadge } from '@/lib/types';
++
++/** Certification chips shown next to a framework item. Each links to the certification. */
++export function CertBadges({ certs, compact = false }: { certs: CertificationBadge[]; compact?: boolean }) {
++  if (!certs.length) return null;
++  return (
++    <>
++      {certs.map((c) => {
++        const inProgress = c.status === 'IN_PROGRESS';
++        const note =
++          c.expiry === 'EXPIRED'
++            ? ' · expired'
++            : c.expiry === 'EXPIRING_SOON' && c.expiresOn
++              ? ` · expires ${ukDate(c.expiresOn)}`
++              : inProgress
++                ? ' · working towards'
++                : '';
++        const title = [c.name, c.issuer, inProgress ? 'Working towards' : 'Earned', c.expiresOn ? `Valid until ${ukDate(c.expiresOn)}` : '']
++          .filter(Boolean)
++          .join(' · ');
++        return (
++          <Link
++            key={c.id}
++            href={`/certifications#cert-${c.id}`}
++            className={`chip cert-chip ${c.expiry === 'EXPIRED' ? 'expired' : inProgress ? 'in-progress' : c.expiry === 'EXPIRING_SOON' ? 'expiring' : ''}`}
++            title={title}
++          >
++            📜 {c.name}
++            {!compact && note}
++          </Link>
++        );
++      })}
++    </>
++  );
++}
+diff --git a/frontend/lib/types.ts b/frontend/lib/types.ts
+index 812ae7f..df5824b 100755
+--- a/frontend/lib/types.ts
++++ b/frontend/lib/types.ts
+@@ -55,6 +55,7 @@ export type GapItem = {
+   targetDescriptor?: string;
+   note?: string;
+   evidenceCount: number;
++  certifications: CertificationBadge[];
+ };
+ 
+ export type GapReport = {
+@@ -207,3 +208,36 @@ export type RoleDetail = {
+   practice: string;
+   skills: { skill: { id: string; name: string; definition?: string; levels: Record<string, string> }; expected: Record<string, string | null> }[];
+ };
++
++// ---------- Certifications ----------
++export type CertificationStatus = 'EARNED' | 'IN_PROGRESS';
++export type CertificationExpiry = 'NO_EXPIRY' | 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED';
++
++/** Short form shown next to framework items. */
++export type CertificationBadge = {
++  id: number;
++  name: string;
++  issuer?: string;
++  status: CertificationStatus;
++  expiry: CertificationExpiry;
++  expiresOn?: string;
++};
++
++export type Certification = {
++  id: number;
++  name: string;
++  issuer?: string;
++  status: CertificationStatus;
++  credentialId?: string;
++  credentialUrl?: string;
++  issuedOn?: string;
++  expiresOn?: string;
++  expiry: CertificationExpiry;
++  notes?: string;
++  refs: { ref: string; name: string }[];
++  createdAt: string;
++  updatedAt: string;
++};
++
++export type CertificationSuggestion = { ref: string; name: string; type: string; score: number };
++export type KnownCertification = { name: string; issuer: string };
+diff --git a/tools/mock-api/certifications.js b/tools/mock-api/certifications.js
+new file mode 100644
+index 0000000..a140d37
+--- /dev/null
++++ b/tools/mock-api/certifications.js
+@@ -0,0 +1,82 @@
++/* In-memory mock of /api/certifications, mirroring the Spring Boot CertificationController. */
++const KNOWN = [
++  ['AWS Certified Solutions Architect - Associate', 'Amazon Web Services'], ['AWS Certified Developer - Associate', 'Amazon Web Services'],
++  ['Microsoft Certified: Azure Fundamentals (AZ-900)', 'Microsoft'], ['HashiCorp Certified: Terraform Associate', 'HashiCorp'],
++  ['CompTIA Security+', 'CompTIA'], ['ISTQB Certified Tester Foundation Level', 'ISTQB'], ['ITIL 4 Foundation', 'PeopleCert'],
++  ['PRINCE2 Practitioner', 'PeopleCert'], ['Professional Scrum Master I (PSM I)', 'Scrum.org'], ['Professional Scrum Product Owner I (PSPO I)', 'Scrum.org'],
++  ['BCS Foundation Certificate in Business Analysis', 'BCS'], ['IAAP Certified Professional in Accessibility Core Competencies (CPACC)', 'IAAP'],
++].map(([name, issuer]) => ({ name, issuer }));
++// Certification keyword -> words to look for in skill names (a simplified version of the real matcher).
++const RULES = [
++  [/aws|azure|google cloud|cloud/, ['cloud', 'infrastructure', 'availability']], [/architect/, ['architecture', 'systems design']],
++  [/developer|terraform/, ['programming', 'coding', 'infrastructure as code']], [/security|cissp/, ['security']],
++  [/istqb|test/, ['test']], [/itil/, ['service', 'problem management']], [/prince2|pmp|project/, ['project', 'lifecycle', 'momentum']],
++  [/scrum|agile|safe/, ['agile', 'lifecycle']], [/product owner|pspo/, ['product', 'value release', 'outcomes']],
++  [/business analysis|cbap/, ['business analysis', 'business modelling', 'requirements']], [/accessib|cpacc/, ['accessibility']], [/data/, ['data']],
++];
++
++module.exports = function certifications({ FW, role, skill, refName }) {
++  const certs = [];
++  let seq = 5000;
++  const today = () => new Date().toISOString().slice(0, 10);
++  const expiry = (c) => {
++    if (!c.expiresOn) return 'NO_EXPIRY';
++    if (c.expiresOn < today()) return 'EXPIRED';
++    const soon = new Date(Date.now() + 90 * 864e5).toISOString().slice(0, 10);
++    return c.expiresOn <= soon ? 'EXPIRING_SOON' : 'ACTIVE';
++  };
++  const view = (c) => ({ ...c, expiry: expiry(c), refs: c.refs.map((r) => ({ ref: r, name: refName(r) || r })) });
++  const badge = (c) => ({ id: c.id, name: c.name, issuer: c.issuer, status: c.status, expiry: expiry(c), expiresOn: c.expiresOn });
++  const apply = (c, b) => Object.assign(c, {
++    name: (b.name || '').trim(), issuer: b.issuer || undefined, status: b.status || 'EARNED', credentialId: b.credentialId || undefined,
++    credentialUrl: b.credentialUrl || undefined, issuedOn: b.issuedOn || undefined, expiresOn: b.expiresOn || undefined, notes: b.notes || undefined,
++    refs: [...new Set((b.refs || []).filter((r) => refName(r)))], updatedAt: new Date().toISOString(),
++  });
++  const order = (a, b) => (expiry(a) === 'EXPIRED') - (expiry(b) === 'EXPIRED') || (b.status === 'IN_PROGRESS') - (a.status === 'IN_PROGRESS') || (b.issuedOn || '').localeCompare(a.issuedOn || '');
++
++  function suggest(me, name, issuer) {
++    const text = `${name || ''} ${issuer || ''}`.toLowerCase();
++    const words = RULES.filter(([re]) => re.test(text)).flatMap(([, w]) => w);
++    const r = role(me.roleId);
++    const pool = r ? r.skills.map((rs) => skill(rs.skillId)) : FW.skills;
++    const out = words.length ? pool.filter((s) => words.some((w) => s.name.toLowerCase().includes(w))).slice(0, 4).map((s) => ({ ref: 'SKILL:' + s.id, name: s.name, type: 'SKILL', score: 3 })) : [];
++    out.push({ ref: 'BEHAVIOUR:developing-your-craft', name: 'Developing your craft', type: 'BEHAVIOUR', score: 1 });
++    return out;
++  }
++
++  return {
++    /** Adds `certifications` to every item in a gap report. */
++    attach(report, userId) {
++      const mine = certs.filter((c) => c.userId === userId);
++      [...report.skills, ...report.behaviours, ...report.impacts].forEach((i) => (i.certifications = mine.filter((c) => c.refs.includes(i.ref)).map(badge)));
++      return report;
++    },
++    /** Earned certifications as export lines, per ref and as a summary section. */
++    exportLines(userId) {
++      const mine = certs.filter((c) => c.userId === userId && c.status === 'EARNED');
++      const line = (c) => `• Certification: ${c.name}${c.issuer ? ` (${c.issuer})` : ''}${c.issuedOn ? `, achieved ${c.issuedOn}` : ''}\n`;
++      const byRef = {};
++      mine.forEach((c) => c.refs.forEach((r) => (byRef[r] ||= []).push(line(c))));
++      return { byRef, summary: mine.length ? '== CERTIFICATIONS ==\n\n' + mine.map(line).join('') + '\n' : '' };
++    },
++    handle(p, m, body, me, send, res) {
++      if (!p.startsWith('/certifications')) return false;
++      let mm;
++      if (p === '/certifications' && m === 'GET') return send(res, 200, certs.filter((c) => c.userId === me.id).sort(order).map(view)), true;
++      if (p === '/certifications/known') return send(res, 200, KNOWN), true;
++      if (p === '/certifications/suggest') return send(res, 200, suggest(me, body.name, body.issuer)), true;
++      if (p === '/certifications' && m === 'POST') {
++        if (!body.name) return send(res, 400, { message: 'name: must not be blank' }), true;
++        const c = apply({ id: ++seq, userId: me.id, createdAt: new Date().toISOString() }, body); certs.push(c);
++        return send(res, 201, view(c)), true;
++      }
++      if ((mm = p.match(/^\/certifications\/(\d+)$/))) {
++        const i = certs.findIndex((c) => c.id === +mm[1] && c.userId === me.id);
++        if (i < 0) return send(res, 404, { message: 'Certification not found' }), true;
++        if (m === 'DELETE') { certs.splice(i, 1); return send(res, 204), true; }
++        return send(res, 200, view(apply(certs[i], body))), true;
++      }
++      return false;
++    },
++  };
++};
+diff --git a/tools/mock-api/server.js b/tools/mock-api/server.js
+index e488ec9..fa581d9 100755
+--- a/tools/mock-api/server.js
++++ b/tools/mock-api/server.js
+@@ -39,6 +39,7 @@ const levelInfo = (xp) => { const l = levelFor(xp); return { level: l, title: TI
+ const role = (id) => FW.roles.find((r) => r.id === id);
+ const skill = (id) => FW.skills.find((s) => s.id === id);
+ const gname = (c) => FW.grades.find((g) => g.code === c)?.name;
++const certs = require('./certifications')({ FW, role: (id) => role(id), skill: (id) => skill(id), refName: (r) => refName(r) });
+ const refName = (ref) => { const [t, id] = ref.split(':'); const src = t === 'SKILL' ? FW.skills : t === 'BEHAVIOUR' ? FW.behaviours : FW.impacts; return src.find((x) => x.id === id)?.name; };
+ 
+ function summary(u) { const r = role(u.roleId); return { id: u.id, displayName: u.displayName, avatarColor: u.avatarColor, roleName: r?.name, capability: r?.capability, currentGradeName: gname(u.currentGrade), level: levelFor(u.xp) }; }
+@@ -58,7 +59,8 @@ function award(u, code) {
+   if (code !== 'WELCOME') posts.unshift({ id: ++seq, authorId: u.id, content: `unlocked the ${a[3]} ${a[1]} badge: ${a[2].toLowerCase()}`, kind: 'ACHIEVEMENT', createdAt: new Date().toISOString(), likes: [], comments: [] });
+ }
+ function expected(rs, g) { if (g in rs.expected) return rs.expected[g]; return Object.values(rs.expected).filter(Boolean).pop() || null; }
+-function report(u, target) {
++function report(u, target) { return certs.attach(reportBase(u, target), u.id); }
++function reportBase(u, target) {
+   const r = role(u.roleId); const cur = u.currentGrade; const tgt = target || u.targetGrade; const mine = assessments[u.id] || {};
+   const ev = {}; journal.filter((j) => j.userId === u.id).forEach((j) => j.refs.forEach((x) => (ev[x] = (ev[x] || 0) + 1)));
+   const skills = r.skills.map((rs) => { const s = skill(rs.skillId); const ce = expected(rs, cur), te = expected(rs, tgt); if (!ce && !te) return null; const ref = 'SKILL:' + s.id; const self = mine[ref] || ce;
+@@ -130,9 +132,9 @@ http.createServer((req, res) => {
+       if (p === '/journal' && m === 'GET') return send(res, 200, journal.filter((j) => j.userId === me.id).sort((a, b) => b.entryDate.localeCompare(a.entryDate)).map(jview));
+       if (p === '/journal' && m === 'POST') { const j = { id: ++seq, userId: me.id, ...body, entryDate: body.entryDate || new Date().toISOString().slice(0, 10), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; journal.push(j); me.xp += 15; award(me, 'FIRST_EVIDENCE'); return send(res, 201, jview(j)); }
+       if ((mm = p.match(/^\/journal\/(\d+)$/))) { const i = journal.findIndex((j) => j.id === +mm[1]); if (m === 'DELETE') { journal.splice(i, 1); return send(res, 204); } Object.assign(journal[i], body); return send(res, 200, jview(journal[i])); }
+-      if (p === '/journal/export') { const mine = journal.filter((j) => j.userId === me.id); const groups = {}; mine.forEach((j) => j.refs.forEach((r) => (groups[r] ||= []).push(j)));
+-        let t = `PROGRESSION ASSESSMENT EVIDENCE - ${me.displayName}\n\n`; Object.entries(groups).forEach(([r, js]) => { t += refName(r) + '\n'; js.forEach((j) => (t += `• ${j.entryDate} - ${j.title}: ${j.body || ''} Impact: ${j.impact || ''}\n`)); t += '\n'; });
+-        award(me, 'EXPORTER'); return send(res, 200, { text: t, entryCount: mine.length, generatedBy: 'plain' }); }
++      if (p === '/journal/export') { const mine = journal.filter((j) => j.userId === me.id); const groups = {}; mine.forEach((j) => j.refs.forEach((r) => (groups[r] ||= []).push(j))); const cx = certs.exportLines(me.id); Object.keys(cx.byRef).forEach((r) => (groups[r] ||= []));
++        let t = `PROGRESSION ASSESSMENT EVIDENCE - ${me.displayName}\n\n`; Object.entries(groups).forEach(([r, js]) => { t += refName(r) + '\n'; (cx.byRef[r] || []).forEach((l) => (t += l)); js.forEach((j) => (t += `• ${j.entryDate} - ${j.title}: ${j.body || ''} Impact: ${j.impact || ''}\n`)); t += '\n'; });
++        t += cx.summary; award(me, 'EXPORTER'); return send(res, 200, { text: t, entryCount: mine.length, generatedBy: 'plain' }); }
+       if (p === '/learning' && m === 'GET') return send(res, 200, learning.filter((l) => l.userId === me.id));
+       if (p === '/learning' && m === 'POST') { const c = body.catalogueId && CAT.find((r) => r.id === body.catalogueId); const l = { id: ++seq, userId: me.id, type: c ? (['COURSE', 'BOOK', 'EVENT', 'PROGRAMME'].includes(c.type) ? c.type : 'OTHER') : body.type, title: c ? c.title : body.title, provider: c?.provider || body.provider, url: c?.url || body.url, catalogueId: c?.id, status: body.status || 'PLANNED', shared: false, refs: [], createdAt: new Date().toISOString() }; learning.unshift(l); award(me, 'FIRST_LEARNING'); return send(res, 201, l); }
+       if ((mm = p.match(/^\/learning\/(\d+)$/))) { const i = learning.findIndex((l) => l.id === +mm[1]); if (m === 'DELETE') { learning.splice(i, 1); return send(res, 204); } Object.entries(body).forEach(([k, v]) => v !== undefined && (learning[i][k] = v)); if (body.status === 'COMPLETED') { learning[i].completedOn = new Date().toISOString().slice(0, 10); me.xp += 30; } return send(res, 200, learning[i]); }
+@@ -145,6 +147,7 @@ http.createServer((req, res) => {
+       if (p === '/achievements/unseen') { const list = (achievements[me.id] || []).filter((a) => !a.seen); list.forEach((a) => (a.seen = true)); return send(res, 200, list.map((e) => { const a = ACH.find((x) => x[0] === e.code); return { code: a[0], title: a[1], description: a[2], icon: a[3], category: a[4], bonusXp: a[5], earned: true, earnedAt: e.earnedAt }; })); }
+       if ((mm = p.match(/^\/achievements\/users\/(\d+)$/))) return send(res, 200, (achievements[+mm[1]] || []).map((e) => { const a = ACH.find((x) => x[0] === e.code); return { code: a[0], title: a[1], description: a[2], icon: a[3], category: a[4], bonusXp: a[5], earned: true }; }));
+       if (p === '/leaderboard') return send(res, 200, [...users].sort((a, b) => b.xp - a.xp).map((u, i) => ({ rank: i + 1, userId: u.id, displayName: u.displayName, avatarColor: u.avatarColor, roleName: role(u.roleId)?.name, xp: u.xp, periodXp: u.xp, level: levelFor(u.xp), levelTitle: levelInfo(u.xp).title, badges: (achievements[u.id] || []).length, streakDays: u.streakDays, isMe: u.id === me.id })));
++      if (certs.handle(p, m, body, me, send, res)) return;
+       send(res, 404, { message: 'Not found in mock: ' + m + ' ' + p });
+     } catch (e) { console.error(e); send(res, 500, { message: e.message }); }
+   });

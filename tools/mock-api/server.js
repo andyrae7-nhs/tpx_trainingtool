@@ -9,6 +9,7 @@ const fs = require('fs');
 const data = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, '../../backend/src/main/resources/data', f), 'utf8'));
 const FW = data('framework.json');
 const CAT = data('catalogue.json');
+const gacha = require('./gacha')(CAT);
 const G = FW.grades.map((g) => g.code);
 const L = FW.skillLevels;
 
@@ -39,6 +40,7 @@ const levelInfo = (xp) => { const l = levelFor(xp); return { level: l, title: TI
 const role = (id) => FW.roles.find((r) => r.id === id);
 const skill = (id) => FW.skills.find((s) => s.id === id);
 const gname = (c) => FW.grades.find((g) => g.code === c)?.name;
+const certs = require('./certifications')({ FW, role: (id) => role(id), skill: (id) => skill(id), refName: (r) => refName(r) });
 const refName = (ref) => { const [t, id] = ref.split(':'); const src = t === 'SKILL' ? FW.skills : t === 'BEHAVIOUR' ? FW.behaviours : FW.impacts; return src.find((x) => x.id === id)?.name; };
 
 function summary(u) { const r = role(u.roleId); return { id: u.id, displayName: u.displayName, avatarColor: u.avatarColor, roleName: r?.name, capability: r?.capability, currentGradeName: gname(u.currentGrade), level: levelFor(u.xp) }; }
@@ -58,7 +60,8 @@ function award(u, code) {
   if (code !== 'WELCOME') posts.unshift({ id: ++seq, authorId: u.id, content: `unlocked the ${a[3]} ${a[1]} badge: ${a[2].toLowerCase()}`, kind: 'ACHIEVEMENT', createdAt: new Date().toISOString(), likes: [], comments: [] });
 }
 function expected(rs, g) { if (g in rs.expected) return rs.expected[g]; return Object.values(rs.expected).filter(Boolean).pop() || null; }
-function report(u, target) {
+function report(u, target) { return certs.attach(reportBase(u, target), u.id); }
+function reportBase(u, target) {
   const r = role(u.roleId); const cur = u.currentGrade; const tgt = target || u.targetGrade; const mine = assessments[u.id] || {};
   const ev = {}; journal.filter((j) => j.userId === u.id).forEach((j) => j.refs.forEach((x) => (ev[x] = (ev[x] || 0) + 1)));
   const skills = r.skills.map((rs) => { const s = skill(rs.skillId); const ce = expected(rs, cur), te = expected(rs, tgt); if (!ce && !te) return null; const ref = 'SKILL:' + s.id; const self = mine[ref] || ce;
@@ -130,9 +133,9 @@ http.createServer((req, res) => {
       if (p === '/journal' && m === 'GET') return send(res, 200, journal.filter((j) => j.userId === me.id).sort((a, b) => b.entryDate.localeCompare(a.entryDate)).map(jview));
       if (p === '/journal' && m === 'POST') { const j = { id: ++seq, userId: me.id, ...body, entryDate: body.entryDate || new Date().toISOString().slice(0, 10), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; journal.push(j); me.xp += 15; award(me, 'FIRST_EVIDENCE'); return send(res, 201, jview(j)); }
       if ((mm = p.match(/^\/journal\/(\d+)$/))) { const i = journal.findIndex((j) => j.id === +mm[1]); if (m === 'DELETE') { journal.splice(i, 1); return send(res, 204); } Object.assign(journal[i], body); return send(res, 200, jview(journal[i])); }
-      if (p === '/journal/export') { const mine = journal.filter((j) => j.userId === me.id); const groups = {}; mine.forEach((j) => j.refs.forEach((r) => (groups[r] ||= []).push(j)));
-        let t = `PROGRESSION ASSESSMENT EVIDENCE - ${me.displayName}\n\n`; Object.entries(groups).forEach(([r, js]) => { t += refName(r) + '\n'; js.forEach((j) => (t += `• ${j.entryDate} - ${j.title}: ${j.body || ''} Impact: ${j.impact || ''}\n`)); t += '\n'; });
-        award(me, 'EXPORTER'); return send(res, 200, { text: t, entryCount: mine.length, generatedBy: 'plain' }); }
+      if (p === '/journal/export') { const mine = journal.filter((j) => j.userId === me.id); const groups = {}; mine.forEach((j) => j.refs.forEach((r) => (groups[r] ||= []).push(j))); const cx = certs.exportLines(me.id); Object.keys(cx.byRef).forEach((r) => (groups[r] ||= []));
+        let t = `PROGRESSION ASSESSMENT EVIDENCE - ${me.displayName}\n\n`; Object.entries(groups).forEach(([r, js]) => { t += refName(r) + '\n'; (cx.byRef[r] || []).forEach((l) => (t += l)); js.forEach((j) => (t += `• ${j.entryDate} - ${j.title}: ${j.body || ''} Impact: ${j.impact || ''}\n`)); t += '\n'; });
+        t += cx.summary; award(me, 'EXPORTER'); return send(res, 200, { text: t, entryCount: mine.length, generatedBy: 'plain' }); }
       if (p === '/learning' && m === 'GET') return send(res, 200, learning.filter((l) => l.userId === me.id));
       if (p === '/learning' && m === 'POST') { const c = body.catalogueId && CAT.find((r) => r.id === body.catalogueId); const l = { id: ++seq, userId: me.id, type: c ? (['COURSE', 'BOOK', 'EVENT', 'PROGRAMME'].includes(c.type) ? c.type : 'OTHER') : body.type, title: c ? c.title : body.title, provider: c?.provider || body.provider, url: c?.url || body.url, catalogueId: c?.id, status: body.status || 'PLANNED', shared: false, refs: [], createdAt: new Date().toISOString() }; learning.unshift(l); award(me, 'FIRST_LEARNING'); return send(res, 201, l); }
       if ((mm = p.match(/^\/learning\/(\d+)$/))) { const i = learning.findIndex((l) => l.id === +mm[1]); if (m === 'DELETE') { learning.splice(i, 1); return send(res, 204); } Object.entries(body).forEach(([k, v]) => v !== undefined && (learning[i][k] = v)); if (body.status === 'COMPLETED') { learning[i].completedOn = new Date().toISOString().slice(0, 10); me.xp += 30; } return send(res, 200, learning[i]); }
@@ -145,6 +148,8 @@ http.createServer((req, res) => {
       if (p === '/achievements/unseen') { const list = (achievements[me.id] || []).filter((a) => !a.seen); list.forEach((a) => (a.seen = true)); return send(res, 200, list.map((e) => { const a = ACH.find((x) => x[0] === e.code); return { code: a[0], title: a[1], description: a[2], icon: a[3], category: a[4], bonusXp: a[5], earned: true, earnedAt: e.earnedAt }; })); }
       if ((mm = p.match(/^\/achievements\/users\/(\d+)$/))) return send(res, 200, (achievements[+mm[1]] || []).map((e) => { const a = ACH.find((x) => x[0] === e.code); return { code: a[0], title: a[1], description: a[2], icon: a[3], category: a[4], bonusXp: a[5], earned: true }; }));
       if (p === '/leaderboard') return send(res, 200, [...users].sort((a, b) => b.xp - a.xp).map((u, i) => ({ rank: i + 1, userId: u.id, displayName: u.displayName, avatarColor: u.avatarColor, roleName: role(u.roleId)?.name, xp: u.xp, periodXp: u.xp, level: levelFor(u.xp), levelTitle: levelInfo(u.xp).title, badges: (achievements[u.id] || []).length, streakDays: u.streakDays, isMe: u.id === me.id })));
+      if (gacha(p, m, body, me, send, res)) return;
+      if (certs.handle(p, m, body, me, send, res)) return;
       send(res, 404, { message: 'Not found in mock: ' + m + ' ' + p });
     } catch (e) { console.error(e); send(res, 500, { message: e.message }); }
   });

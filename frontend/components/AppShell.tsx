@@ -16,10 +16,13 @@ const NAV = [
   { section: 'Record' },
   { href: '/journal', label: 'Evidence journal', ico: '📝' },
   { href: '/learning', label: 'Learning log', ico: '🎓' },
+  { href: '/certifications', label: 'Certifications', ico: '📜' },
   { section: 'Together' },
   { href: '/community', label: 'Community', ico: '💬' },
   { href: '/leaderboard', label: 'Leaderboard', ico: '🏆' },
   { href: '/achievements', label: 'Badges', ico: '🏅' },
+  { section: 'Play' },
+  { href: '/gacha', label: 'Idea gacha', ico: '🎰' },
 ] as const;
 
 export function Brand() {

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { CertBadges } from '@/components/CertBadges';
 import { AppShell } from '@/components/AppShell';
 import { Descriptor, ErrorBox, Loading, Ring } from '@/components/ui';
 import { get, put } from '@/lib/api';
@@ -250,7 +251,9 @@ function GapCard({ item, report, edit, onEdit }: { item: GapItem; report: GapRep
         <span className="chip blue">
           📝 {item.evidenceCount} piece{item.evidenceCount === 1 ? '' : 's'} of evidence
         </span>
+        <CertBadges certs={item.certifications || []} />
         <Link href={`/journal?new=1&ref=${encodeURIComponent(item.ref)}`}>+ Add evidence</Link>
+        {!(item.certifications || []).length && <Link href={`/certifications?new=1&ref=${encodeURIComponent(item.ref)}`}>+ Add certification</Link>}
         <Link href={`/library?q=${encodeURIComponent(item.name.replace(/\(.*\)/, '').trim())}`}>Find training</Link>
       </div>
     </div>

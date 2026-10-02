@@ -1,5 +1,8 @@
 package com.tpximpact.trainingtool.progression;
 
+import com.tpximpact.trainingtool.certification.Certification;
+import com.tpximpact.trainingtool.certification.CertificationBadge;
+import com.tpximpact.trainingtool.certification.CertificationRepository;
 import com.tpximpact.trainingtool.common.ApiException;
 import com.tpximpact.trainingtool.framework.FrameworkModels.*;
 import com.tpximpact.trainingtool.framework.FrameworkService;
@@ -8,6 +11,7 @@ import com.tpximpact.trainingtool.progression.SelfAssessment.ItemType;
 import com.tpximpact.trainingtool.user.User;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -19,12 +23,14 @@ public class ProgressionService {
     private final FrameworkService framework;
     private final SelfAssessmentRepository assessments;
     private final JournalEntryRepository journal;
+    private final CertificationRepository certifications;
 
     public ProgressionService(FrameworkService framework, SelfAssessmentRepository assessments,
-                              JournalEntryRepository journal) {
+                              JournalEntryRepository journal, CertificationRepository certifications) {
         this.framework = framework;
         this.assessments = assessments;
         this.journal = journal;
+        this.certifications = certifications;
     }
 
     public enum Status { MET, GAP, NOT_REQUIRED }
@@ -32,7 +38,7 @@ public class ProgressionService {
     public record GapItem(String ref, ItemType type, String id, String name, String definition,
                           String currentExpected, String targetExpected, String selfLevel, boolean selfAssessed,
                           int gap, Status status, String selfDescriptor, String targetDescriptor,
-                          String note, long evidenceCount) {}
+                          String note, long evidenceCount, List<CertificationBadge> certifications) {}
 
     public record Summary(int required, int met, int gaps, int readinessPercent, int assessed, int totalItems,
                           int skillGaps, int behaviourGaps, int impactGaps) {}
@@ -56,6 +62,7 @@ public class ProgressionService {
         Map<String, Long> evidence = new HashMap<>();
         journal.findByUserIdOrderByEntryDateDescIdDesc(user.getId())
                 .forEach(e -> e.getRefs().forEach(r -> evidence.merge(r, 1L, Long::sum)));
+        Map<String, List<CertificationBadge>> certs = certificationsByRef(user.getId());
 
         List<GapItem> skills = new ArrayList<>();
         for (RoleSkill rs : role.skills()) {
@@ -71,11 +78,11 @@ public class ProgressionService {
             Status status = tgtExp == null ? Status.NOT_REQUIRED : gap > 0 ? Status.GAP : Status.MET;
             skills.add(new GapItem(ref, ItemType.SKILL, s.id(), s.name(), s.definition(), curExp, tgtExp, self,
                     sa != null, gap, status, descriptor(s.levels(), self), descriptor(s.levels(), tgtExp),
-                    sa == null ? null : sa.getNote(), evidence.getOrDefault(ref, 0L)));
+                    sa == null ? null : sa.getNote(), evidence.getOrDefault(ref, 0L), certs.getOrDefault(ref, List.of())));
         }
 
-        List<GapItem> behaviours = graded(framework.behaviours(), ItemType.BEHAVIOUR, current, target, mine, evidence);
-        List<GapItem> impacts = graded(framework.impacts(), ItemType.IMPACT, current, target, mine, evidence);
+        List<GapItem> behaviours = graded(framework.behaviours(), ItemType.BEHAVIOUR, current, target, mine, evidence, certs);
+        List<GapItem> impacts = graded(framework.impacts(), ItemType.IMPACT, current, target, mine, evidence, certs);
 
         List<GapItem> all = new ArrayList<>();
         all.addAll(skills);
@@ -94,7 +101,8 @@ public class ProgressionService {
     }
 
     private List<GapItem> graded(List<GradedItem> items, ItemType type, String current, String target,
-                                 Map<String, SelfAssessment> mine, Map<String, Long> evidence) {
+                                 Map<String, SelfAssessment> mine, Map<String, Long> evidence,
+                                 Map<String, List<CertificationBadge>> certs) {
         List<GapItem> out = new ArrayList<>();
         for (GradedItem g : items) {
             String ref = type + ":" + g.id();
@@ -108,8 +116,20 @@ public class ProgressionService {
             Status status = !required ? Status.NOT_REQUIRED : gap > 0 ? Status.GAP : Status.MET;
             out.add(new GapItem(ref, type, g.id(), g.name(), g.definition(), framework.grade(current).name(),
                     framework.grade(target).name(), self, sa != null, gap, status, g.levels().get(self), tgtText,
-                    sa == null ? null : sa.getNote(), evidence.getOrDefault(ref, 0L)));
+                    sa == null ? null : sa.getNote(), evidence.getOrDefault(ref, 0L), certs.getOrDefault(ref, List.of())));
         }
+        return out;
+    }
+
+    /** Each framework ref mapped to the certifications tagged against it. */
+    public Map<String, List<CertificationBadge>> certificationsByRef(Long userId) {
+        LocalDate today = LocalDate.now();
+        Map<String, List<CertificationBadge>> out = new HashMap<>();
+        certifications.findByUserId(userId).stream()
+                .sorted(Comparator.comparing((Certification c) -> !c.isCurrent(today))
+                        .thenComparing(c -> c.getName().toLowerCase(Locale.UK)))
+                .forEach(c -> c.getRefs().forEach(r ->
+                        out.computeIfAbsent(r, k -> new ArrayList<>()).add(CertificationBadge.of(c, today))));
         return out;
     }
 

@@ -1,0 +1,2115 @@
+diff --git a/README.md b/README.md
+index c835cac..4ac468a 100755
+--- a/README.md
++++ b/README.md
+@@ -26,6 +26,7 @@ Pick your job role and grade, and TPX Grow compares you against the Progression
+ | **Learning log** | `/learning` | Track courses, books, events and programmes as planned, in progress or completed. Give each a star rating, write a review and share it with colleagues. |
+ | **Achievements** | `/achievements` | 20 badges across Getting started, Evidence, Learning, Together and Mastery. XP, levels (Seedling → Forest) and daily streaks. Pip celebrates each new badge with confetti. |
+ | **Leaderboard** | `/leaderboard` | XP rankings for everyone, your capability or the people you follow. Filter by this week, this month or all time. |
++| **Idea gacha** | `/gacha` | Spend gems on a 10-pull of random ideas: development actions, project and hackathon ideas, and every resource in the training library. There are four rarities from Common to Legendary, pity (a guaranteed Legendary within 50 pulls), a collection to complete and a pull history. It's **pay to win, as satire**: pulls award XP, XP ranks you on the leaderboard, and a pretend gem shop raises your VIP tier, which boosts XP from pulls. **No real money is involved.** |
+ | **Community** | `/community`, `/people/:id` | An informal feed with posts, likes and comments, and a way to follow colleagues. Badges and shared reviews post to the feed automatically, so friends can see what you're learning. |
+ | **Pip, your assistant** | Everywhere | A pop-up helper in the spirit of the old Office assistant, as an original sprout character. Pip offers tips for each page and chats about your gaps and evidence, using Claude when configured. You can hide Pip if you want peace and quiet. |
+ 
+@@ -92,9 +93,9 @@ cd backend && mvn spring-boot:run
+ cd frontend && npm install && npm run dev      # http://localhost:3000, proxies to :8080
+ ```
+ 
+-**Frontend-only work:** if you don't have Java handy, `node tools/mock-api/server.js` starts a lightweight in-memory mock of the API on port 8080. It covers the main flows and uses the same framework and catalogue data.
++**Frontend-only work:** if you don't have Java handy, `node tools/mock-api/server.js` starts a lightweight in-memory mock of the API on port 8080. It covers the main flows, including the idea gacha, and uses the same framework and catalogue data.
+ 
+-Run the backend tests with `cd backend && mvn test`. `ApiSmokeTest` walks through registering, onboarding, gap analysis, getting a plan, adding a journal entry, exporting, achievements and the leaderboard.
++Run the backend tests with `cd backend && mvn test`. `ApiSmokeTest` walks through registering, onboarding, gap analysis, getting a plan, adding a journal entry, exporting, achievements and the leaderboard. `GachaApiTest` covers pulls, guarantees, the daily claim, the shop, XP trading, the collection and history.
+ 
+ ---
+ 
+@@ -207,6 +208,29 @@ Everything is under `/api`. Endpoints marked 🔒 need an `Authorization: Bearer
+ | GET | `/leaderboard` | `scope=all\|capability\|friends`, `period=all\|month\|week` | Ranked rows |
+ | GET | `/activity` | | Your 20 most recent XP events |
+ 
++### Idea gacha 🔒
++Gems come from a starter grant (1,000, enough for one 10-pull), a daily claim (300), trading in XP (1 XP = 5 gems), or the pretend gem shop. The shop never takes payment.
++
++| Method | Path | Body | Returns |
++|---|---|---|---|
++| GET | `/gacha` | | `{wallet, banners[{code, name, cost, description, guaranteedLegendary, odds}], shop[], vipTiers[], poolSize, pullsPerBatch, minXpExchange}` |
++| POST | `/gacha/pull` | `{banner: "STANDARD"\|"BOOSTED"\|"WHALE"}` (default `STANDARD`) | `{batchId, banner, cards[{idea, isNew, xp, gemRefund, pity}], gemsSpent, gemsRefunded, xpGained, badgesUnlocked[], wallet}`. `400` if you can't afford it |
++| POST | `/gacha/daily` | | `wallet`. `400` if you've already claimed today |
++| POST | `/gacha/exchange` | `{xp}` (minimum 10) | `wallet`. Removes that XP and adds gems |
++| POST | `/gacha/shop/{code}` | | `wallet`. Pack codes: `pocket-change`, `consultants-coffer`, `partner-track`, `whale-of-a-time` |
++| GET | `/gacha/collection` | | `{poolSize, owned, byRarity[], items[]}`. Cards you haven't pulled only show their rarity and kind |
++| GET | `/gacha/history` | | Your last 10 ten-pulls |
++
++`wallet` is `{gems, xp, pityCount, pityThreshold, dailyAvailable, dailyGems, vipLevel, vipTitle, xpBonusPercent, fakeSpendPence, nextVipTitle, nextVipPence, totalPulls, gemsPerXp}`.
++
++| Banner | Cost | Common | Rare | Epic | Legendary | Extra |
++|---|---|---|---|---|---|---|
++| Standard | 1,000 💎 | 60% | 28% | 10% | 2% | At least one Rare or better |
++| Boosted | 1,500 💎 | 48.4% | 22.6% | 24.2% | 4.8% | Triple Epic and Legendary weight |
++| Whale | 5,000 💎 | 48.4% | 22.6% | 24.2% | 4.8% | Guaranteed Legendary |
++
++Each pull earns XP by rarity (3 / 8 / 25 / 100) plus 10% per VIP level. Duplicates refund gems (10 / 25 / 60 / 200). You can change any of these numbers in `gacha/GachaEconomy.java` and `gacha/Rarity.java`.
++
+ ### Community 🔒
+ | Method | Path | Body / query | Returns |
+ |---|---|---|---|
+@@ -236,6 +260,8 @@ Everything is under `/api`. Endpoints marked 🔒 need an `Authorization: Bearer
+ | Comment | 2 |
+ | Follow someone | 2 |
+ | Chat with Pip | 1 |
++| Idea gacha pull | 3 to 100 per card, by rarity (+VIP bonus) |
++| Trade XP for gems | minus the XP traded |
+ 
+ Badges add bonus XP on top. Levels need 50 × n × (n−1) XP: 0, 100, 300, 600, 1,000 and so on.
+ 
+@@ -250,6 +276,7 @@ backend/                     Spring Boot API
+     catalogue/     Training catalogue + tag matching
+     config/        App properties, demo data seeder
+     framework/     Progression framework loader + endpoints
++    gacha/         Idea gacha: idea pool, gems, pulls, pretend gem shop
+     gamification/  XP, levels, achievements, leaderboard
+     journal/       Evidence journal + export
+     learning/      Learning log + reviews
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/gacha/ActivityConstraintFixer.java b/backend/src/main/java/com/tpximpact/trainingtool/gacha/ActivityConstraintFixer.java
+new file mode 100644
+index 0000000..9a41cf7
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/gacha/ActivityConstraintFixer.java
+@@ -0,0 +1,46 @@
++package com.tpximpact.trainingtool.gacha;
++
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++import org.springframework.boot.ApplicationArguments;
++import org.springframework.boot.ApplicationRunner;
++import org.springframework.core.annotation.Order;
++import org.springframework.jdbc.core.JdbcTemplate;
++import org.springframework.stereotype.Component;
++
++import javax.sql.DataSource;
++import java.sql.Connection;
++
++/**
++ * Hibernate adds a CHECK constraint listing the allowed values when it first creates an enum column,
++ * and ddl-auto=update never widens it. Databases created before the gacha existed would reject the
++ * new GACHA_* activities, so on PostgreSQL we drop that constraint (the enum is still enforced in Java).
++ */
++@Component
++@Order(0)
++public class ActivityConstraintFixer implements ApplicationRunner {
++
++    private static final Logger log = LoggerFactory.getLogger(ActivityConstraintFixer.class);
++
++    private final DataSource dataSource;
++    private final JdbcTemplate jdbc;
++
++    public ActivityConstraintFixer(DataSource dataSource, JdbcTemplate jdbc) {
++        this.dataSource = dataSource;
++        this.jdbc = jdbc;
++    }
++
++    @Override
++    public void run(ApplicationArguments args) {
++        try (Connection c = dataSource.getConnection()) {
++            if (!c.getMetaData().getDatabaseProductName().toLowerCase().contains("postgres")) return;
++        } catch (Exception e) {
++            return;
++        }
++        try {
++            jdbc.execute("ALTER TABLE IF EXISTS activity_log DROP CONSTRAINT IF EXISTS activity_log_activity_check");
++        } catch (Exception e) {
++            log.warn("Could not relax activity_log constraint: {}", e.getMessage());
++        }
++    }
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaController.java b/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaController.java
+new file mode 100644
+index 0000000..b4622b4
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaController.java
+@@ -0,0 +1,65 @@
++package com.tpximpact.trainingtool.gacha;
++
++import com.tpximpact.trainingtool.security.CurrentUser;
++import jakarta.validation.Valid;
++import jakarta.validation.constraints.Min;
++import org.springframework.web.bind.annotation.*;
++
++import java.util.List;
++
++/**
++ * The idea gacha: spend gems on 10-pulls of random development actions, project ideas and
++ * training resources. Gems come from a daily claim, trading in XP, or the (pretend) gem shop.
++ */
++@RestController
++@RequestMapping("/api/gacha")
++public class GachaController {
++
++    private final GachaService gacha;
++    private final CurrentUser currentUser;
++
++    public GachaController(GachaService gacha, CurrentUser currentUser) {
++        this.gacha = gacha;
++        this.currentUser = currentUser;
++    }
++
++    public record PullRequest(String banner) {}
++
++    public record ExchangeRequest(@Min(1) int xp) {}
++
++    @GetMapping
++    public GachaService.Overview overview() {
++        return gacha.overview(currentUser.get());
++    }
++
++    @PostMapping("/pull")
++    public GachaService.PullResult pull(@RequestBody(required = false) PullRequest body) {
++        return gacha.pull(currentUser.get(), body == null ? null : body.banner());
++    }
++
++    @PostMapping("/daily")
++    public GachaService.WalletView daily() {
++        return gacha.claimDaily(currentUser.get());
++    }
++
++    @PostMapping("/exchange")
++    public GachaService.WalletView exchange(@Valid @RequestBody ExchangeRequest body) {
++        return gacha.exchangeXp(currentUser.get(), body.xp());
++    }
++
++    /** Buys a gem pack with pretend money. No payment is taken, ever. */
++    @PostMapping("/shop/{code}")
++    public GachaService.WalletView buy(@PathVariable String code) {
++        return gacha.buyPack(currentUser.get(), code);
++    }
++
++    @GetMapping("/collection")
++    public GachaService.CollectionView collection() {
++        return gacha.collection(currentUser.id());
++    }
++
++    @GetMapping("/history")
++    public List<GachaService.HistoryBatch> history() {
++        return gacha.history(currentUser.id());
++    }
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaEconomy.java b/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaEconomy.java
+new file mode 100644
+index 0000000..7314a12
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaEconomy.java
+@@ -0,0 +1,110 @@
++package com.tpximpact.trainingtool.gacha;
++
++import java.util.EnumMap;
++import java.util.List;
++import java.util.Map;
++import java.util.Optional;
++
++/**
++ * The numbers behind the gacha. Everything is pretend: gems are free, and the shop "prices" are
++ * satire. Nobody is ever charged. The pay-to-win part is that pulls award XP, XP ranks you on the
++ * leaderboard, and spending (pretend) money raises your VIP tier, which boosts XP from pulls.
++ */
++public final class GachaEconomy {
++    private GachaEconomy() {}
++
++    public static final int PULLS_PER_BATCH = 10;
++    public static final int STARTER_GEMS = 1_000;
++    public static final int DAILY_GEMS = 300;
++    /** Pulls without a Legendary before one is guaranteed. */
++    public static final int PITY_THRESHOLD = 50;
++    /** Gems you get for each XP you trade in. */
++    public static final int GEMS_PER_XP = 5;
++    public static final int MIN_XP_EXCHANGE = 10;
++    /** Stops runaway numbers from someone clicking "buy" in a loop. */
++    public static final long MAX_GEMS = 10_000_000L;
++
++    public enum Banner {
++        STANDARD("Standard 10-pull", 1_000, 1, false,
++                "Ten ideas at standard odds. At least one Rare or better."),
++        BOOSTED("Boosted 10-pull", 1_500, 3, false,
++                "Triple Epic and Legendary odds. For people who want it more."),
++        WHALE("Whale 10-pull", 5_000, 3, true,
++                "Boosted odds plus a guaranteed Legendary. Money can buy happiness.");
++
++        private final String label;
++        private final int cost;
++        private final int rareBoost;
++        private final boolean guaranteedLegendary;
++        private final String description;
++
++        Banner(String label, int cost, int rareBoost, boolean guaranteedLegendary, String description) {
++            this.label = label;
++            this.cost = cost;
++            this.rareBoost = rareBoost;
++            this.guaranteedLegendary = guaranteedLegendary;
++            this.description = description;
++        }
++
++        public String label() { return label; }
++        public int cost() { return cost; }
++        public boolean guaranteedLegendary() { return guaranteedLegendary; }
++        public String description() { return description; }
++
++        /** Weight for a rarity on this banner. Epic and Legendary get multiplied by the boost. */
++        public int weight(Rarity r) {
++            return r.atLeast(Rarity.EPIC) ? r.weight() * rareBoost : r.weight();
++        }
++
++        /** Percentage chance of each rarity per pull (ignoring pity and guarantees). */
++        public Map<Rarity, Double> odds() {
++            int total = 0;
++            for (Rarity r : Rarity.values()) total += weight(r);
++            Map<Rarity, Double> out = new EnumMap<>(Rarity.class);
++            for (Rarity r : Rarity.values()) out.put(r, Math.round(weight(r) * 1000.0 / total) / 10.0);
++            return out;
++        }
++
++        public static Optional<Banner> parse(String code) {
++            if (code == null) return Optional.of(STANDARD);
++            for (Banner b : values()) if (b.name().equalsIgnoreCase(code.trim())) return Optional.of(b);
++            return Optional.empty();
++        }
++    }
++
++    public record GemPack(String code, String name, long pricePence, long gems, String tagline) {}
++
++    public static final List<GemPack> SHOP = List.of(
++            new GemPack("pocket-change", "Pocket change", 99, 300, "Less than a coffee. Probably."),
++            new GemPack("consultants-coffer", "Consultant's coffer", 999, 3_300, "Billable to the client? (No.)"),
++            new GemPack("partner-track", "Partner track bundle", 4_999, 18_000, "Skip the promotion panel."),
++            new GemPack("whale-of-a-time", "Whale of a time", 9_999, 40_000, "Best value! Unlocks VIP 4 instantly.")
++    );
++
++    public static Optional<GemPack> pack(String code) {
++        return SHOP.stream().filter(p -> p.code().equals(code)).findFirst();
++    }
++
++    public record VipTier(int level, String title, long minSpendPence) {}
++
++    public static final List<VipTier> VIP = List.of(
++            new VipTier(0, "Free-to-play", 0),
++            new VipTier(1, "Minnow", 99),
++            new VipTier(2, "Dolphin", 999),
++            new VipTier(3, "Shark", 4_999),
++            new VipTier(4, "Whale", 9_999),
++            new VipTier(5, "Leviathan", 49_999));
++
++    /** Extra XP from pulls per VIP level, as a percentage. VIP 5 = +50%. */
++    public static final int XP_BONUS_PER_VIP = 10;
++
++    public static VipTier vipFor(long spendPence) {
++        VipTier tier = VIP.get(0);
++        for (VipTier t : VIP) if (spendPence >= t.minSpendPence()) tier = t;
++        return tier;
++    }
++
++    public static Optional<VipTier> nextVip(VipTier current) {
++        return current.level() + 1 < VIP.size() ? Optional.of(VIP.get(current.level() + 1)) : Optional.empty();
++    }
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaPull.java b/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaPull.java
+new file mode 100644
+index 0000000..601f946
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaPull.java
+@@ -0,0 +1,62 @@
++package com.tpximpact.trainingtool.gacha;
++
++import jakarta.persistence.*;
++
++import java.time.Instant;
++
++/** One card from one pull. A 10-pull saves 10 rows sharing a batchId. */
++@Entity
++@Table(name = "gacha_pull", indexes = {
++        @Index(name = "idx_gacha_pull_user", columnList = "userId"),
++        @Index(name = "idx_gacha_pull_user_idea", columnList = "userId,ideaId")})
++public class GachaPull {
++
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++
++    @Column(nullable = false)
++    private Long userId;
++
++    @Column(nullable = false, length = 36)
++    private String batchId;
++
++    /** Banner used: STANDARD, BOOSTED or WHALE. Stored as text so new banners need no migration. */
++    @Column(nullable = false, length = 20)
++    private String banner;
++
++    @Column(nullable = false)
++    private String ideaId;
++
++    /** Stored as text (not an enum column) so it survives changes to the rarity list. */
++    @Column(nullable = false, length = 20)
++    private String rarity;
++
++    private int xp;
++
++    private boolean duplicate;
++
++    private Instant createdAt = Instant.now();
++
++    public GachaPull() {}
++
++    public GachaPull(Long userId, String batchId, String banner, String ideaId, Rarity rarity, int xp, boolean duplicate) {
++        this.userId = userId;
++        this.batchId = batchId;
++        this.banner = banner;
++        this.ideaId = ideaId;
++        this.rarity = rarity.name();
++        this.xp = xp;
++        this.duplicate = duplicate;
++    }
++
++    public Long getId() { return id; }
++    public Long getUserId() { return userId; }
++    public String getBatchId() { return batchId; }
++    public String getBanner() { return banner; }
++    public String getIdeaId() { return ideaId; }
++    public String getRarity() { return rarity; }
++    public int getXp() { return xp; }
++    public boolean isDuplicate() { return duplicate; }
++    public Instant getCreatedAt() { return createdAt; }
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaPullRepository.java b/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaPullRepository.java
+new file mode 100644
+index 0000000..e9c7704
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaPullRepository.java
+@@ -0,0 +1,27 @@
++package com.tpximpact.trainingtool.gacha;
++
++import org.springframework.data.jpa.repository.JpaRepository;
++import org.springframework.data.jpa.repository.Query;
++import org.springframework.data.repository.query.Param;
++
++import java.time.Instant;
++import java.util.List;
++
++public interface GachaPullRepository extends JpaRepository<GachaPull, Long> {
++
++    /** Newest first. 100 rows = the last 10 ten-pulls. */
++    List<GachaPull> findTop100ByUserIdOrderByIdDesc(Long userId);
++
++    interface OwnedIdea {
++        String getIdeaId();
++        long getCopies();
++        Instant getFirstPulledAt();
++    }
++
++    @Query("select p.ideaId as ideaId, count(p) as copies, min(p.createdAt) as firstPulledAt "
++            + "from GachaPull p where p.userId = :userId group by p.ideaId")
++    List<OwnedIdea> ownedBy(@Param("userId") Long userId);
++
++    @Query("select distinct p.ideaId from GachaPull p where p.userId = :userId")
++    List<String> ownedIdeaIds(@Param("userId") Long userId);
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaService.java b/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaService.java
+new file mode 100644
+index 0000000..419121a
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaService.java
+@@ -0,0 +1,280 @@
++package com.tpximpact.trainingtool.gacha;
++
++import com.tpximpact.trainingtool.common.ApiException;
++import com.tpximpact.trainingtool.gacha.GachaEconomy.Banner;
++import com.tpximpact.trainingtool.gacha.GachaEconomy.GemPack;
++import com.tpximpact.trainingtool.gacha.GachaEconomy.VipTier;
++import com.tpximpact.trainingtool.gamification.AchievementCatalog.Achievement;
++import com.tpximpact.trainingtool.gamification.Activity;
++import com.tpximpact.trainingtool.gamification.GamificationService;
++import com.tpximpact.trainingtool.user.User;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.security.SecureRandom;
++import java.time.Instant;
++import java.time.LocalDate;
++import java.util.*;
++import java.util.random.RandomGenerator;
++
++/** Gems, pulls, the gem shop and your idea collection. */
++@Service
++public class GachaService {
++
++    private final GachaWalletRepository wallets;
++    private final GachaPullRepository pulls;
++    private final IdeaPool pool;
++    private final GamificationService gamification;
++    private RandomGenerator random = new SecureRandom();
++
++    public GachaService(GachaWalletRepository wallets, GachaPullRepository pulls, IdeaPool pool,
++                        GamificationService gamification) {
++        this.wallets = wallets;
++        this.pulls = pulls;
++        this.pool = pool;
++        this.gamification = gamification;
++    }
++
++    /** For tests that need predictable pulls. */
++    void setRandom(RandomGenerator random) {
++        this.random = random;
++    }
++
++    // ---------------------------------------------------------------- views
++
++    public record WalletView(long gems, int xp, int pityCount, int pityThreshold, boolean dailyAvailable,
++                             int dailyGems, int vipLevel, String vipTitle, int xpBonusPercent, long fakeSpendPence,
++                             String nextVipTitle, Long nextVipPence, long totalPulls, int gemsPerXp) {}
++
++    public record BannerView(String code, String name, int cost, String description, boolean guaranteedLegendary,
++                             Map<Rarity, Double> odds) {}
++
++    public record IdeaView(String id, String kind, String rarity, String rarityLabel, int stars, String title,
++                           String description, String icon, String url, String resourceId) {
++        static IdeaView of(Idea i) {
++            return new IdeaView(i.id(), i.kind().name(), i.rarity().name(), i.rarity().label(), i.rarity().stars(),
++                    i.title(), i.description(), i.icon(), i.url(), i.resourceId());
++        }
++    }
++
++    public record Overview(WalletView wallet, List<BannerView> banners, List<GemPack> shop, List<VipTier> vipTiers,
++                           int poolSize, int pullsPerBatch, int minXpExchange) {}
++
++    public record PulledCard(IdeaView idea, boolean isNew, int xp, int gemRefund, boolean pity) {}
++
++    public record PullResult(String batchId, String banner, List<PulledCard> cards, int gemsSpent, int gemsRefunded,
++                             int xpGained, List<String> badgesUnlocked, WalletView wallet) {}
++
++    public record CollectionItem(String id, String kind, String rarity, int stars, boolean owned, String title,
++                                 String description, String icon, String url, long copies, Instant firstPulledAt) {}
++
++    public record RarityProgress(String rarity, String label, int owned, int total) {}
++
++    public record CollectionView(int poolSize, int owned, List<RarityProgress> byRarity, List<CollectionItem> items) {}
++
++    public record HistoryCard(String ideaId, String title, String icon, String rarity, boolean duplicate) {}
++
++    public record HistoryBatch(String batchId, String banner, Instant createdAt, int xpGained, List<HistoryCard> cards) {}
++
++    // ---------------------------------------------------------------- reads
++
++    @Transactional
++    public Overview overview(User user) {
++        GachaWallet w = walletFor(user.getId());
++        List<BannerView> banners = Arrays.stream(Banner.values())
++                .map(b -> new BannerView(b.name(), b.label(), b.cost(), b.description(), b.guaranteedLegendary(), b.odds()))
++                .toList();
++        return new Overview(view(w, user), banners, GachaEconomy.SHOP, GachaEconomy.VIP, pool.size(),
++                GachaEconomy.PULLS_PER_BATCH, GachaEconomy.MIN_XP_EXCHANGE);
++    }
++
++    @Transactional(readOnly = true)
++    public CollectionView collection(Long userId) {
++        Map<String, GachaPullRepository.OwnedIdea> owned = new HashMap<>();
++        pulls.ownedBy(userId).forEach(o -> owned.put(o.getIdeaId(), o));
++        List<CollectionItem> items = new ArrayList<>();
++        Map<Rarity, int[]> progress = new EnumMap<>(Rarity.class);
++        for (Rarity r : Rarity.values()) progress.put(r, new int[2]);
++        for (Idea idea : pool.all()) {
++            var o = owned.get(idea.id());
++            int[] p = progress.get(idea.rarity());
++            p[1]++;
++            if (o != null) {
++                p[0]++;
++                items.add(new CollectionItem(idea.id(), idea.kind().name(), idea.rarity().name(), idea.rarity().stars(),
++                        true, idea.title(), idea.description(), idea.icon(), idea.url(), o.getCopies(), o.getFirstPulledAt()));
++            } else {
++                // Locked cards only reveal their rarity and kind. No peeking.
++                items.add(new CollectionItem(idea.id(), idea.kind().name(), idea.rarity().name(), idea.rarity().stars(),
++                        false, null, null, null, null, 0, null));
++            }
++        }
++        items.sort(Comparator.comparing((CollectionItem i) -> Rarity.valueOf(i.rarity())).reversed()
++                .thenComparing(i -> !i.owned())
++                .thenComparing(i -> Objects.requireNonNullElse(i.title(), "")));
++        List<RarityProgress> byRarity = Arrays.stream(Rarity.values()).map(r ->
++                new RarityProgress(r.name(), r.label(), progress.get(r)[0], progress.get(r)[1])).toList();
++        int ownedCount = (int) pool.all().stream().filter(i -> owned.containsKey(i.id())).count();
++        return new CollectionView(pool.size(), ownedCount, byRarity, items);
++    }
++
++    @Transactional(readOnly = true)
++    public List<HistoryBatch> history(Long userId) {
++        Map<String, List<GachaPull>> batches = new LinkedHashMap<>();
++        for (GachaPull p : pulls.findTop100ByUserIdOrderByIdDesc(userId)) {
++            batches.computeIfAbsent(p.getBatchId(), k -> new ArrayList<>()).add(p);
++        }
++        List<HistoryBatch> out = new ArrayList<>();
++        batches.forEach((id, list) -> {
++            list.sort(Comparator.comparing(GachaPull::getId));
++            List<HistoryCard> cards = list.stream().map(p -> {
++                Optional<Idea> idea = pool.find(p.getIdeaId());
++                return new HistoryCard(p.getIdeaId(), idea.map(Idea::title).orElse("Retired idea"),
++                        idea.map(Idea::icon).orElse("❔"), p.getRarity(), p.isDuplicate());
++            }).toList();
++            int xp = list.stream().mapToInt(GachaPull::getXp).sum();
++            out.add(new HistoryBatch(id, list.get(0).getBanner(), list.get(0).getCreatedAt(), xp, cards));
++        });
++        return out;
++    }
++
++    // ---------------------------------------------------------------- writes
++
++    @Transactional
++    public WalletView claimDaily(User user) {
++        GachaWallet w = walletFor(user.getId());
++        LocalDate today = LocalDate.now();
++        if (today.equals(w.getLastDailyClaim())) {
++            throw ApiException.badRequest("You've already claimed today's gems. Come back tomorrow (or visit the shop 👀)");
++        }
++        w.setLastDailyClaim(today);
++        addGems(w, GachaEconomy.DAILY_GEMS);
++        return view(wallets.save(w), user);
++    }
++
++    @Transactional
++    public WalletView exchangeXp(User user, int xp) {
++        if (xp < GachaEconomy.MIN_XP_EXCHANGE) {
++            throw ApiException.badRequest("Trade at least " + GachaEconomy.MIN_XP_EXCHANGE + " XP");
++        }
++        if (xp > user.getXp()) {
++            throw ApiException.badRequest("You only have " + user.getXp() + " XP");
++        }
++        GachaWallet w = walletFor(user.getId());
++        addGems(w, (long) xp * GachaEconomy.GEMS_PER_XP);
++        wallets.save(w);
++        gamification.adjustXp(user, Activity.GACHA_EXCHANGE, -xp);
++        return view(w, user);
++    }
++
++    @Transactional
++    public WalletView buyPack(User user, String code) {
++        GemPack pack = GachaEconomy.pack(code).orElseThrow(() -> ApiException.notFound("Gem pack"));
++        GachaWallet w = walletFor(user.getId());
++        addGems(w, pack.gems());
++        w.setFakeSpendPence(w.getFakeSpendPence() + pack.pricePence());
++        return view(wallets.save(w), user);
++    }
++
++    @Transactional
++    public PullResult pull(User user, String bannerCode) {
++        Banner banner = Banner.parse(bannerCode)
++                .orElseThrow(() -> ApiException.badRequest("Unknown banner. Use STANDARD, BOOSTED or WHALE"));
++        GachaWallet w = walletFor(user.getId());
++        if (w.getGems() < banner.cost()) {
++            throw ApiException.badRequest("Not enough gems: you need " + banner.cost() + " 💎 and have " + w.getGems()
++                    + ". Claim your daily gems, trade XP or visit the shop.");
++        }
++        w.setGems(w.getGems() - banner.cost());
++
++        // Roll rarities first so the guarantees can be applied to the whole batch.
++        Rarity[] rarities = new Rarity[GachaEconomy.PULLS_PER_BATCH];
++        boolean[] pity = new boolean[rarities.length];
++        int sinceLegendary = w.getPullsSinceLegendary();
++        for (int i = 0; i < rarities.length; i++) {
++            if (sinceLegendary + 1 >= GachaEconomy.PITY_THRESHOLD) {
++                rarities[i] = Rarity.LEGENDARY;
++                pity[i] = true;
++            } else {
++                rarities[i] = roll(banner);
++            }
++            sinceLegendary = rarities[i] == Rarity.LEGENDARY ? 0 : sinceLegendary + 1;
++        }
++        int last = rarities.length - 1;
++        boolean anyLegendary = Arrays.stream(rarities).anyMatch(r -> r == Rarity.LEGENDARY);
++        if (banner.guaranteedLegendary() && !anyLegendary) {
++            rarities[last] = Rarity.LEGENDARY;
++            pity[last] = true;
++            sinceLegendary = 0;
++        } else if (Arrays.stream(rarities).noneMatch(r -> r.atLeast(Rarity.RARE))) {
++            rarities[last] = Rarity.RARE;
++            pity[last] = true;
++        }
++
++        VipTier vip = GachaEconomy.vipFor(w.getFakeSpendPence());
++        int bonusPercent = vip.level() * GachaEconomy.XP_BONUS_PER_VIP;
++        Set<String> owned = new HashSet<>(pulls.ownedIdeaIds(user.getId()));
++        String batchId = UUID.randomUUID().toString();
++        List<PulledCard> cards = new ArrayList<>();
++        List<GachaPull> rows = new ArrayList<>();
++        int xpTotal = 0;
++        int refundTotal = 0;
++        for (int i = 0; i < rarities.length; i++) {
++            List<Idea> candidates = pool.ofRarity(rarities[i]);
++            Idea idea = candidates.get(random.nextInt(candidates.size()));
++            boolean isNew = owned.add(idea.id());
++            int xp = idea.rarity().xp() * (100 + bonusPercent) / 100;
++            int refund = isNew ? 0 : idea.rarity().duplicateGems();
++            xpTotal += xp;
++            refundTotal += refund;
++            cards.add(new PulledCard(IdeaView.of(idea), isNew, xp, refund, pity[i]));
++            rows.add(new GachaPull(user.getId(), batchId, banner.name(), idea.id(), idea.rarity(), xp, !isNew));
++        }
++        pulls.saveAll(rows);
++
++        addGems(w, refundTotal);
++        w.setPullsSinceLegendary(sinceLegendary);
++        w.setTotalPulls(w.getTotalPulls() + rarities.length);
++        wallets.save(w);
++
++        List<Achievement> unlocked = gamification.adjustXp(user, Activity.GACHA_REWARD, xpTotal);
++        return new PullResult(batchId, banner.name(), cards, banner.cost(), refundTotal, xpTotal,
++                unlocked.stream().map(a -> a.icon() + " " + a.title()).toList(), view(w, user));
++    }
++
++    // ---------------------------------------------------------------- helpers
++
++    private Rarity roll(Banner banner) {
++        int total = 0;
++        for (Rarity r : Rarity.values()) total += banner.weight(r);
++        int n = random.nextInt(total);
++        for (Rarity r : Rarity.values()) {
++            n -= banner.weight(r);
++            if (n < 0) return r;
++        }
++        return Rarity.COMMON;
++    }
++
++    private GachaWallet walletFor(Long userId) {
++        return wallets.findById(userId)
++                .orElseGet(() -> wallets.save(new GachaWallet(userId, GachaEconomy.STARTER_GEMS)));
++    }
++
++    private static void addGems(GachaWallet w, long gems) {
++        long next = w.getGems() + gems;
++        if (next > GachaEconomy.MAX_GEMS) {
++            throw ApiException.badRequest("Even whales have limits. Spend some gems first.");
++        }
++        w.setGems(next);
++    }
++
++    private WalletView view(GachaWallet w, User user) {
++        VipTier vip = GachaEconomy.vipFor(w.getFakeSpendPence());
++        Optional<VipTier> next = GachaEconomy.nextVip(vip);
++        return new WalletView(w.getGems(), user.getXp(), w.getPullsSinceLegendary(), GachaEconomy.PITY_THRESHOLD,
++                !LocalDate.now().equals(w.getLastDailyClaim()), GachaEconomy.DAILY_GEMS, vip.level(), vip.title(),
++                vip.level() * GachaEconomy.XP_BONUS_PER_VIP, w.getFakeSpendPence(),
++                next.map(VipTier::title).orElse(null), next.map(VipTier::minSpendPence).orElse(null),
++                w.getTotalPulls(), GachaEconomy.GEMS_PER_XP);
++    }
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaWallet.java b/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaWallet.java
+new file mode 100644
+index 0000000..9322c4b
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaWallet.java
+@@ -0,0 +1,48 @@
++package com.tpximpact.trainingtool.gacha;
++
++import jakarta.persistence.*;
++
++import java.time.LocalDate;
++
++/** A person's gems, pity counter and (pretend) spending. One row per user, created on first visit. */
++@Entity
++@Table(name = "gacha_wallet")
++public class GachaWallet {
++
++    @Id
++    private Long userId;
++
++    private long gems;
++
++    /** Pulls since the last Legendary. Hitting the pity threshold guarantees one. */
++    private int pullsSinceLegendary;
++
++    private long totalPulls;
++
++    /** Pretend money "spent" in the gem shop, in pence. No real payment is ever taken. */
++    private long fakeSpendPence;
++
++    private LocalDate lastDailyClaim;
++
++    @Version
++    private Long version;
++
++    public GachaWallet() {}
++
++    public GachaWallet(Long userId, long gems) {
++        this.userId = userId;
++        this.gems = gems;
++    }
++
++    public Long getUserId() { return userId; }
++    public long getGems() { return gems; }
++    public void setGems(long gems) { this.gems = gems; }
++    public int getPullsSinceLegendary() { return pullsSinceLegendary; }
++    public void setPullsSinceLegendary(int pullsSinceLegendary) { this.pullsSinceLegendary = pullsSinceLegendary; }
++    public long getTotalPulls() { return totalPulls; }
++    public void setTotalPulls(long totalPulls) { this.totalPulls = totalPulls; }
++    public long getFakeSpendPence() { return fakeSpendPence; }
++    public void setFakeSpendPence(long fakeSpendPence) { this.fakeSpendPence = fakeSpendPence; }
++    public LocalDate getLastDailyClaim() { return lastDailyClaim; }
++    public void setLastDailyClaim(LocalDate lastDailyClaim) { this.lastDailyClaim = lastDailyClaim; }
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaWalletRepository.java b/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaWalletRepository.java
+new file mode 100644
+index 0000000..1e53d00
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/gacha/GachaWalletRepository.java
+@@ -0,0 +1,5 @@
++package com.tpximpact.trainingtool.gacha;
++
++import org.springframework.data.jpa.repository.JpaRepository;
++
++public interface GachaWalletRepository extends JpaRepository<GachaWallet, Long> {}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/gacha/Idea.java b/backend/src/main/java/com/tpximpact/trainingtool/gacha/Idea.java
+new file mode 100644
+index 0000000..eabc462
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/gacha/Idea.java
+@@ -0,0 +1,14 @@
++package com.tpximpact.trainingtool.gacha;
++
++/**
++ * One card in the gacha pool.
++ *
++ * @param kind       ACTION (a small development action), PROJECT (something to build or pitch)
++ *                   or RESOURCE (a course, book, event, programme or article from the training catalogue)
++ * @param resourceId catalogue id when kind is RESOURCE, otherwise null
++ */
++public record Idea(String id, Kind kind, Rarity rarity, String title, String description, String icon,
++                   String url, String resourceId) {
++
++    public enum Kind { ACTION, PROJECT, RESOURCE }
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/gacha/IdeaPool.java b/backend/src/main/java/com/tpximpact/trainingtool/gacha/IdeaPool.java
+new file mode 100644
+index 0000000..b63dc72
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/gacha/IdeaPool.java
+@@ -0,0 +1,157 @@
++package com.tpximpact.trainingtool.gacha;
++
++import com.tpximpact.trainingtool.catalogue.CatalogueService;
++import com.tpximpact.trainingtool.catalogue.Resource;
++import com.tpximpact.trainingtool.gacha.Idea.Kind;
++import org.springframework.stereotype.Component;
++
++import java.util.*;
++
++/**
++ * Everything you can pull: hand-written development actions and project ideas, plus every
++ * resource in the training catalogue. Catalogue rarity comes from its level (Foundation = Common,
++ * Intermediate = Rare, Advanced = Epic) and events go up one tier. Legendaries are hand-picked.
++ */
++@Component
++public class IdeaPool {
++
++    private final List<Idea> all;
++    private final Map<String, Idea> byId = new LinkedHashMap<>();
++    private final Map<Rarity, List<Idea>> byRarity = new EnumMap<>(Rarity.class);
++
++    public IdeaPool(CatalogueService catalogue) {
++        List<Idea> ideas = new ArrayList<>(HANDWRITTEN);
++        for (Resource r : catalogue.all()) {
++            ideas.add(new Idea("res:" + r.id(), Kind.RESOURCE, rarityFor(r), r.title(),
++                    Objects.requireNonNullElse(r.description(), ""), iconFor(r.type()), r.url(), r.id()));
++        }
++        this.all = List.copyOf(ideas);
++        for (Rarity rarity : Rarity.values()) byRarity.put(rarity, new ArrayList<>());
++        for (Idea idea : all) {
++            if (byId.put(idea.id(), idea) != null) throw new IllegalStateException("Duplicate idea id " + idea.id());
++            byRarity.get(idea.rarity()).add(idea);
++        }
++        byRarity.forEach((rarity, list) -> {
++            if (list.isEmpty()) throw new IllegalStateException("No ideas with rarity " + rarity);
++        });
++    }
++
++    public List<Idea> all() { return all; }
++
++    public Optional<Idea> find(String id) { return Optional.ofNullable(byId.get(id)); }
++
++    public List<Idea> ofRarity(Rarity rarity) { return byRarity.get(rarity); }
++
++    public int size() { return all.size(); }
++
++    static Rarity rarityFor(Resource r) {
++        Rarity base = switch (Objects.requireNonNullElse(r.level(), "Foundation")) {
++            case "Advanced" -> Rarity.EPIC;
++            case "Intermediate" -> Rarity.RARE;
++            default -> Rarity.COMMON;
++        };
++        if ("EVENT".equals(r.type()) && base != Rarity.EPIC) {
++            base = Rarity.values()[base.ordinal() + 1];
++        }
++        return base;
++    }
++
++    static String iconFor(String type) {
++        return switch (Objects.requireNonNullElse(type, "")) {
++            case "BOOK" -> "📖";
++            case "COURSE" -> "💻";
++            case "EVENT" -> "🎟️";
++            case "PROGRAMME" -> "🎓";
++            case "ARTICLE" -> "📰";
++            default -> "📚";
++        };
++    }
++
++    private static Idea action(String id, Rarity rarity, String icon, String title, String description) {
++        return new Idea("act:" + id, Kind.ACTION, rarity, title, description, icon, null, null);
++    }
++
++    private static Idea project(String id, Rarity rarity, String icon, String title, String description) {
++        return new Idea("prj:" + id, Kind.PROJECT, rarity, title, description, icon, null, null);
++    }
++
++    private static final List<Idea> HANDWRITTEN = List.of(
++            // ---------- Development actions: consulting ----------
++            action("playback", Rarity.COMMON, "🔁", "Play it back",
++                    "In your next client conversation, summarise what you heard in one sentence before responding. Note what changed."),
++            action("five-whys", Rarity.COMMON, "❓", "Five whys",
++                    "Take one request from your backlog and ask 'why?' five times. Write down the real need you uncovered."),
++            action("stakeholder-map", Rarity.COMMON, "🗺️", "Map your stakeholders",
++                    "Sketch a power/interest grid for your current project in 15 minutes. Share it with a teammate and compare."),
++            action("feedback-ask", Rarity.COMMON, "🙋", "Ask for one piece of feedback",
++                    "Ask a colleague: 'What's one thing I could do differently in meetings?' Log the answer in your journal."),
++            action("one-pager", Rarity.COMMON, "📄", "One-page summary",
++                    "Rewrite your last long update as a one-pager: situation, options, recommendation."),
++            action("meeting-purpose", Rarity.COMMON, "🎯", "Purpose, outcome, agenda",
++                    "Open your next meeting by stating its purpose and desired outcome in under 30 seconds."),
++            action("lunch-learn", Rarity.RARE, "🥪", "Host a lunch and learn",
++                    "Run a 20-minute session on something you know well. Ask attendees for one takeaway each."),
++            action("challenge-kindly", Rarity.RARE, "🤝", "Challenge, kindly",
++                    "Find one assumption on your project you disagree with and raise it using 'I've noticed… I wonder if…'."),
++            action("workshop-design", Rarity.RARE, "🧩", "Design a workshop",
++                    "Plan a 60-minute workshop with clear outcomes, activities and timings, even if you don't run it yet."),
++            action("proposal-section", Rarity.RARE, "✍️", "Write a proposal section",
++                    "Volunteer to draft one section of a bid or proposal. Ask the bid lead for feedback on it."),
++            action("coach-someone", Rarity.EPIC, "🌱", "Coach someone for a month",
++                    "Offer four 30-minute coaching sessions to a more junior colleague. Agree a goal at the start."),
++            action("lead-retro", Rarity.EPIC, "🔄", "Facilitate a client retro",
++                    "Run a retrospective with the client in the room. Capture actions with owners and dates."),
++
++            // ---------- Development actions: technical ----------
++            action("read-pr", Rarity.COMMON, "👀", "Review a stranger's PR",
++                    "Review a pull request in a codebase you don't normally touch. Leave one question and one compliment."),
++            action("til", Rarity.COMMON, "💡", "Today I learned",
++                    "Post a 'TIL' in the community feed about something technical you learned this week."),
++            action("explain-simply", Rarity.COMMON, "🧒", "Explain it simply",
++                    "Explain a technical concept from your project to a non-technical colleague in two minutes."),
++            action("adr", Rarity.RARE, "🏛️", "Write an ADR",
++                    "Document one architectural decision on your project: context, options, decision, consequences."),
++            action("pair", Rarity.RARE, "👯", "Pair for a morning",
++                    "Pair program or pair design with someone from another capability for half a day."),
++            action("accessibility-audit", Rarity.RARE, "♿", "Mini accessibility audit",
++                    "Run one page of your service through a screen reader and an automated checker. Fix or log the issues."),
++            action("threat-model", Rarity.EPIC, "🛡️", "Threat model a feature",
++                    "Use STRIDE on one feature with your team. Turn the top three risks into backlog items."),
++            action("tech-talk", Rarity.EPIC, "🎤", "Give a tech talk",
++                    "Submit a 15-minute talk to an internal community of practice or a local meetup."),
++
++            // ---------- Project and hackathon ideas ----------
++            project("slack-standup", Rarity.COMMON, "🤖", "Stand-up bot",
++                    "A tiny bot that collects async stand-up updates and posts a summary to the team channel."),
++            project("jargon-buster", Rarity.COMMON, "📘", "Jargon buster",
++                    "A searchable glossary of client and public sector acronyms, built from your project docs."),
++            project("meeting-cost", Rarity.COMMON, "⏱️", "Meeting cost clock",
++                    "A browser widget that shows the running cost of a meeting based on who's in the room."),
++            project("retro-generator", Rarity.RARE, "🎲", "Retro format generator",
++                    "Suggests a fresh retrospective format each sprint based on team mood and size."),
++            project("user-research-repo", Rarity.RARE, "🔎", "Research insight repository",
++                    "Tag and search user research quotes across projects so insights don't get lost."),
++            project("carbon-dashboard", Rarity.RARE, "🌍", "Cloud carbon dashboard",
++                    "Estimate the carbon footprint of a service's cloud usage and suggest greener regions."),
++            project("gov-form-ai", Rarity.EPIC, "📝", "Plain English form checker",
++                    "An AI tool that rewrites government form questions to meet the GOV.UK style guide."),
++            project("bid-library", Rarity.EPIC, "📚", "Reusable bid library",
++                    "Search past winning bid answers by capability and client, with AI-suggested first drafts."),
++            project("skills-graph", Rarity.EPIC, "🕸️", "Skills graph",
++                    "Visualise who knows what across the company from journal tags, so staffing gets easier."),
++
++            // ---------- Legendary ----------
++            action("shadow-partner", Rarity.LEGENDARY, "👑", "Shadow a partner on a pitch",
++                    "Ask to join a senior leader on a real client pitch, from prep to debrief. Write up what you'd copy."),
++            action("run-discovery", Rarity.LEGENDARY, "🧭", "Lead a discovery",
++                    "Put yourself forward to lead the next discovery phase, with a senior sponsor to back you up."),
++            action("publish-blog", Rarity.LEGENDARY, "🌟", "Publish on the company blog",
++                    "Write and publish a blog post on something you've delivered. Tag the client (with permission)."),
++            action("conference-talk", Rarity.LEGENDARY, "🏟️", "Speak at a conference",
++                    "Submit a talk to an external conference. Your community of practice will help you rehearse."),
++            project("open-source", Rarity.LEGENDARY, "🐙", "Open-source a tool",
++                    "Take something your team built and release it as open source, with docs and a licence."),
++            project("hackathon-win", Rarity.LEGENDARY, "🏆", "Turn a hack into a product",
++                    "Pick your best hackathon idea, write a one-page business case and pitch it to leadership.")
++    );
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/gacha/Rarity.java b/backend/src/main/java/com/tpximpact/trainingtool/gacha/Rarity.java
+new file mode 100644
+index 0000000..9087bd7
+--- /dev/null
++++ b/backend/src/main/java/com/tpximpact/trainingtool/gacha/Rarity.java
+@@ -0,0 +1,39 @@
++package com.tpximpact.trainingtool.gacha;
++
++/**
++ * How rare an idea is. Weights are out of 1,000 per pull on the standard banner.
++ * Rarer ideas give more XP, which is what makes spending pay off on the leaderboard.
++ */
++public enum Rarity {
++    COMMON("Common", 1, 600, 3, 10),
++    RARE("Rare", 2, 280, 8, 25),
++    EPIC("Epic", 3, 100, 25, 60),
++    LEGENDARY("Legendary", 4, 20, 100, 200);
++
++    private final String label;
++    private final int stars;
++    private final int weight;
++    private final int xp;
++    private final int duplicateGems;
++
++    Rarity(String label, int stars, int weight, int xp, int duplicateGems) {
++        this.label = label;
++        this.stars = stars;
++        this.weight = weight;
++        this.xp = xp;
++        this.duplicateGems = duplicateGems;
++    }
++
++    public String label() { return label; }
++    public int stars() { return stars; }
++    /** Base weight out of 1,000 on the standard banner. */
++    public int weight() { return weight; }
++    /** XP awarded every time this rarity is pulled (before any VIP bonus). */
++    public int xp() { return xp; }
++    /** Gems refunded when you pull an idea you already own. */
++    public int duplicateGems() { return duplicateGems; }
++
++    public boolean atLeast(Rarity other) {
++        return ordinal() >= other.ordinal();
++    }
++}
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/gamification/Activity.java b/backend/src/main/java/com/tpximpact/trainingtool/gamification/Activity.java
+index 11098f6..148082f 100755
+--- a/backend/src/main/java/com/tpximpact/trainingtool/gamification/Activity.java
++++ b/backend/src/main/java/com/tpximpact/trainingtool/gamification/Activity.java
+@@ -16,7 +16,11 @@ public enum Activity {
+     JOURNAL_EXPORTED(10),
+     PIP_CHAT(1),
+     DAILY_VISIT(3),
+-    ACHIEVEMENT_BONUS(0);
++    ACHIEVEMENT_BONUS(0),
++    /** XP traded for gacha gems. Logged with a negative amount. */
++    GACHA_EXCHANGE(0),
++    /** XP won from gacha pulls. Amount varies by rarity. */
++    GACHA_REWARD(0);
+ 
+     private final int xp;
+ 
+diff --git a/backend/src/main/java/com/tpximpact/trainingtool/gamification/GamificationService.java b/backend/src/main/java/com/tpximpact/trainingtool/gamification/GamificationService.java
+index 12e6b21..7a1c14d 100755
+--- a/backend/src/main/java/com/tpximpact/trainingtool/gamification/GamificationService.java
++++ b/backend/src/main/java/com/tpximpact/trainingtool/gamification/GamificationService.java
+@@ -63,6 +63,20 @@ public class GamificationService {
+         return evaluate(user);
+     }
+ 
++    /**
++     * Add (or, with a negative amount, remove) a variable amount of XP, e.g. gacha rewards and
++     * XP traded for gems. XP never drops below zero. Returns any achievements this unlocks.
++     */
++    @Transactional
++    public List<Achievement> adjustXp(User user, Activity act, int amount) {
++        int applied = Math.max(amount, -user.getXp());
++        if (applied == 0) return List.of();
++        user.setXp(user.getXp() + applied);
++        activity.save(new ActivityLog(user.getId(), act, applied));
++        users.save(user);
++        return applied > 0 ? evaluate(user) : List.of();
++    }
++
+     /** Update the daily streak. Call once per authenticated session start. */
+     @Transactional
+     public void touch(User user) {
+diff --git a/backend/src/test/java/com/tpximpact/trainingtool/GachaApiTest.java b/backend/src/test/java/com/tpximpact/trainingtool/GachaApiTest.java
+new file mode 100644
+index 0000000..0917c46
+--- /dev/null
++++ b/backend/src/test/java/com/tpximpact/trainingtool/GachaApiTest.java
+@@ -0,0 +1,109 @@
++package com.tpximpact.trainingtool;
++
++import com.fasterxml.jackson.databind.JsonNode;
++import com.fasterxml.jackson.databind.ObjectMapper;
++import org.junit.jupiter.api.Test;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
++import org.springframework.boot.test.context.SpringBootTest;
++import org.springframework.http.MediaType;
++import org.springframework.test.web.servlet.MockMvc;
++import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
++
++import java.util.stream.StreamSupport;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
++
++@SpringBootTest(properties = "app.seed-demo-data=false")
++@AutoConfigureMockMvc
++class GachaApiTest {
++
++    @Autowired MockMvc mvc;
++    @Autowired ObjectMapper mapper;
++
++    private String token;
++
++    private MockHttpServletRequestBuilder auth(MockHttpServletRequestBuilder b) {
++        return b.header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON);
++    }
++
++    private JsonNode json(MockHttpServletRequestBuilder b, int status) throws Exception {
++        String body = mvc.perform(auth(b)).andExpect(status().is(status)).andReturn().getResponse().getContentAsString();
++        return mapper.readTree(body);
++    }
++
++    @Test
++    void gachaNeedsToken() throws Exception {
++        mvc.perform(get("/api/gacha")).andExpect(status().isUnauthorized());
++    }
++
++    @Test
++    void pullShopAndCollect() throws Exception {
++        String reg = mvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
++                        .content("{\"email\":\"whale@example.com\",\"password\":\"password123\",\"displayName\":\"Wally Whale\"}"))
++                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
++        token = mapper.readTree(reg).get("token").asText();
++
++        // Starter gems cover exactly one standard 10-pull.
++        JsonNode overview = json(get("/api/gacha"), 200);
++        assertThat(overview.at("/wallet/gems").asLong()).isEqualTo(1000);
++        assertThat(overview.get("banners").size()).isEqualTo(3);
++        assertThat(overview.get("shop").size()).isGreaterThan(0);
++        assertThat(overview.get("poolSize").asInt()).isGreaterThan(100);
++        int startXp = overview.at("/wallet/xp").asInt();
++
++        JsonNode first = json(post("/api/gacha/pull").content("{\"banner\":\"STANDARD\"}"), 200);
++        assertThat(first.get("cards").size()).isEqualTo(10);
++        assertThat(StreamSupport.stream(first.get("cards").spliterator(), false)
++                .anyMatch(c -> !"COMMON".equals(c.at("/idea/rarity").asText())))
++                .as("every 10-pull has at least one Rare or better").isTrue();
++        assertThat(first.get("xpGained").asInt()).isGreaterThan(0);
++        assertThat(first.at("/wallet/xp").asInt()).isGreaterThanOrEqualTo(startXp + first.get("xpGained").asInt());
++
++        // Broke now (unless duplicate refunds were very generous).
++        if (first.at("/wallet/gems").asLong() < 1000) {
++            json(post("/api/gacha/pull").content("{\"banner\":\"STANDARD\"}"), 400);
++        }
++
++        JsonNode daily = json(post("/api/gacha/daily"), 200);
++        assertThat(daily.get("gems").asLong()).isEqualTo(first.at("/wallet/gems").asLong() + 300);
++        assertThat(daily.get("dailyAvailable").asBoolean()).isFalse();
++        json(post("/api/gacha/daily"), 400);
++
++        // Pay to win.
++        JsonNode bought = json(post("/api/gacha/shop/whale-of-a-time"), 200);
++        assertThat(bought.get("vipLevel").asInt()).isEqualTo(4);
++        assertThat(bought.get("xpBonusPercent").asInt()).isEqualTo(40);
++        json(post("/api/gacha/shop/not-a-pack"), 404);
++
++        JsonNode whale = json(post("/api/gacha/pull").content("{\"banner\":\"WHALE\"}"), 200);
++        assertThat(StreamSupport.stream(whale.get("cards").spliterator(), false)
++                .anyMatch(c -> "LEGENDARY".equals(c.at("/idea/rarity").asText())))
++                .as("whale pulls always include a Legendary").isTrue();
++        assertThat(whale.at("/wallet/pityCount").asInt()).isLessThan(10);
++
++        json(post("/api/gacha/pull").content("{\"banner\":\"NOPE\"}"), 400);
++
++        // Trade XP for gems.
++        long gemsBefore = whale.at("/wallet/gems").asLong();
++        int xpBefore = whale.at("/wallet/xp").asInt();
++        JsonNode traded = json(post("/api/gacha/exchange").content("{\"xp\":10}"), 200);
++        assertThat(traded.get("gems").asLong()).isEqualTo(gemsBefore + 50);
++        assertThat(traded.get("xp").asInt()).isEqualTo(xpBefore - 10);
++        json(post("/api/gacha/exchange").content("{\"xp\":999999}"), 400);
++
++        JsonNode collection = json(get("/api/gacha/collection"), 200);
++        assertThat(collection.get("owned").asInt()).isBetween(1, 20);
++        assertThat(collection.get("items").size()).isEqualTo(collection.get("poolSize").asInt());
++        JsonNode locked = StreamSupport.stream(collection.get("items").spliterator(), false)
++                .filter(i -> !i.get("owned").asBoolean()).findFirst().orElseThrow();
++        assertThat(locked.has("title")).as("locked cards stay secret").isFalse();
++
++        JsonNode history = json(get("/api/gacha/history"), 200);
++        assertThat(history.size()).isEqualTo(2);
++        assertThat(history.get(0).get("banner").asText()).isEqualTo("WHALE");
++        assertThat(history.get(0).get("cards").size()).isEqualTo(10);
++    }
++}
+diff --git a/frontend/app/gacha/page.tsx b/frontend/app/gacha/page.tsx
+new file mode 100644
+index 0000000..162ed68
+--- /dev/null
++++ b/frontend/app/gacha/page.tsx
+@@ -0,0 +1,613 @@
++'use client';
++
++import { useCallback, useEffect, useMemo, useState } from 'react';
++import { AppShell } from '@/components/AppShell';
++import { ErrorBox, Loading } from '@/components/ui';
++import { get, post } from '@/lib/api';
++import { useAuth } from '@/lib/auth';
++import { timeAgo, ukDate } from '@/lib/format';
++import type {
++  CollectionItem,
++  GachaBanner,
++  GachaCollection,
++  GachaHistoryBatch,
++  GachaOverview,
++  GachaWallet,
++  IdeaKind,
++  PullResult,
++  Rarity,
++} from '@/lib/types';
++
++const RARITIES: Rarity[] = ['LEGENDARY', 'EPIC', 'RARE', 'COMMON'];
++const RARITY_LABEL: Record<Rarity, string> = { COMMON: 'Common', RARE: 'Rare', EPIC: 'Epic', LEGENDARY: 'Legendary' };
++const KIND_LABEL: Record<IdeaKind, string> = { ACTION: 'Development action', PROJECT: 'Project idea', RESOURCE: 'Training resource' };
++const KIND_FILTER: Record<IdeaKind | 'ALL', string> = { ALL: 'All kinds', ACTION: 'Actions', PROJECT: 'Projects', RESOURCE: 'Resources' };
++const BANNER_STYLE: Record<string, string> = { STANDARD: 'bg-blue', BOOSTED: 'bg-lilac', WHALE: 'whale' };
++
++const gbp = (pence: number) => (pence / 100).toLocaleString('en-GB', { style: 'currency', currency: 'GBP' });
++const n = (v: number) => v.toLocaleString('en-GB');
++
++export default function GachaPage() {
++  return (
++    <AppShell>
++      <Gacha />
++    </AppShell>
++  );
++}
++
++type Tab = 'shop' | 'collection' | 'history' | 'odds';
++
++function Gacha() {
++  const { refresh } = useAuth();
++  const [data, setData] = useState<GachaOverview | null>(null);
++  const [error, setError] = useState<string | null>(null);
++  const [busy, setBusy] = useState<string | null>(null);
++  const [result, setResult] = useState<PullResult | null>(null);
++  const [tab, setTab] = useState<Tab>('shop');
++  const [toast, setToast] = useState<string | null>(null);
++  const [reload, setReload] = useState(0);
++
++  useEffect(() => {
++    get<GachaOverview>('/gacha').then(setData).catch((e) => setError(e.message));
++  }, []);
++
++  useEffect(() => {
++    if (!toast) return;
++    const t = setTimeout(() => setToast(null), 3500);
++    return () => clearTimeout(t);
++  }, [toast]);
++
++  const setWallet = (wallet: GachaWallet) => setData((d) => (d ? { ...d, wallet } : d));
++
++  const run = async <T,>(key: string, fn: () => Promise<T>, after?: (r: T) => void) => {
++    setBusy(key);
++    setError(null);
++    try {
++      const r = await fn();
++      after?.(r);
++    } catch (e) {
++      setError(e instanceof Error ? e.message : 'Something went wrong');
++    } finally {
++      setBusy(null);
++    }
++  };
++
++  const pull = (banner: GachaBanner) =>
++    run(`pull:${banner.code}`, () => post<PullResult>('/gacha/pull', { banner: banner.code }), (r) => {
++      setResult(r);
++      setWallet(r.wallet);
++      setReload((x) => x + 1);
++      refresh();
++    });
++
++  const claimDaily = () =>
++    run('daily', () => post<GachaWallet>('/gacha/daily'), (w) => {
++      setWallet(w);
++      setToast(`+${n(w.dailyGems)} 💎 claimed. See you tomorrow!`);
++    });
++
++  if (!data) return error ? <ErrorBox error={error} /> : <Loading />;
++  const w = data.wallet;
++  const pityLeft = w.pityThreshold - w.pityCount;
++
++  return (
++    <>
++      <div className="page-head">
++        <div>
++          <h1>Idea gacha</h1>
++          <p className="subtitle">
++            Pull {data.pullsPerBatch} random ideas from a pool of {n(data.poolSize)} development actions, project ideas and training resources.
++          </p>
++        </div>
++        <div className="row wrap">
++          <span className="chip gem-chip" title="Gems">
++            💎 {n(w.gems)}
++          </span>
++          <span className="chip" title="Your XP">
++            ⭐ {n(w.xp)} XP
++          </span>
++          <span className={`chip vip vip-${w.vipLevel}`} title={`+${w.xpBonusPercent}% XP from pulls`}>
++            VIP {w.vipLevel} · {w.vipTitle}
++          </span>
++          <button className="btn small" onClick={claimDaily} disabled={!w.dailyAvailable || busy !== null}>
++            {w.dailyAvailable ? `🎁 Claim ${w.dailyGems} daily gems` : '✅ Daily claimed'}
++          </button>
++        </div>
++      </div>
++
++      <p className="notice small">
++        🎭 <strong>Everything here is pretend.</strong> Gems are free and the shop takes no money. The joke is real, though: every pull awards XP, and XP puts you on the
++        leaderboard. VIP tiers boost that XP. You've been warned.
++      </p>
++
++      <ErrorBox error={error} />
++
++      <section className="grid grid-3 mt">
++        {data.banners.map((b) => {
++          const short = b.cost - w.gems;
++          return (
++            <div key={b.code} className={`card banner ${BANNER_STYLE[b.code] || ''}`}>
++              <div className="row between">
++                <h2 style={{ margin: 0 }}>{b.name}</h2>
++                {b.guaranteedLegendary && <span className="chip dark">★★★★ guaranteed</span>}
++              </div>
++              <p className="small">{b.description}</p>
++              <div className="odds-strip" aria-label="Odds">
++                {RARITIES.map((r) => (
++                  <span key={r} className={`odds r-${r.toLowerCase()}`} title={`${RARITY_LABEL[r]} ${b.odds[r]}%`}>
++                    {RARITY_LABEL[r]} {b.odds[r]}%
++                  </span>
++                ))}
++              </div>
++              <button className="btn mt" style={{ width: '100%' }} onClick={() => pull(b)} disabled={short > 0 || busy !== null}>
++                {busy === `pull:${b.code}` ? 'Pulling…' : `Pull ×${data.pullsPerBatch} · ${n(b.cost)} 💎`}
++              </button>
++              {short > 0 && (
++                <div className="xs mt" style={{ textAlign: 'center' }}>
++                  You need {n(short)} more 💎.{' '}
++                  <button className="linkish" onClick={() => setTab('shop')}>
++                    Top up?
++                  </button>
++                </div>
++              )}
++            </div>
++          );
++        })}
++      </section>
++
++      <section className="card mt">
++        <div className="row between">
++          <strong>Legendary pity</strong>
++          <span className="small muted">
++            {pityLeft <= 1 ? 'Your next pull is a guaranteed Legendary!' : `Legendary guaranteed within ${pityLeft} pulls`}
++          </span>
++        </div>
++        <div className="bar mt pity">
++          <span style={{ width: `${(w.pityCount / w.pityThreshold) * 100}%` }} />
++        </div>
++        <div className="xs muted mt">
++          {n(w.totalPulls)} pulls so far · {gbp(w.fakeSpendPence)} pretend money spent
++        </div>
++      </section>
++
++      <div className="tabs mt2" role="tablist">
++        {(
++          [
++            ['shop', '🛒 Gem shop'],
++            ['collection', '🗂️ Collection'],
++            ['history', '🕘 History'],
++            ['odds', '📜 Odds and rules'],
++          ] as [Tab, string][]
++        ).map(([k, l]) => (
++          <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>
++            {l}
++          </button>
++        ))}
++      </div>
++
++      {tab === 'shop' && <Shop data={data} busy={busy} run={run} setWallet={setWallet} setToast={setToast} refresh={refresh} />}
++      {tab === 'collection' && <Collection reload={reload} />}
++      {tab === 'history' && <History reload={reload} />}
++      {tab === 'odds' && <Odds data={data} />}
++
++      {result && <Reveal result={result} onClose={() => setResult(null)} onAgain={() => {
++        const b = data.banners.find((x) => x.code === result.banner);
++        setResult(null);
++        if (b) pull(b);
++      }} canAgain={(data.banners.find((x) => x.code === result.banner)?.cost ?? Infinity) <= data.wallet.gems} />}
++
++      {toast && (
++        <div className="gacha-toast" role="status">
++          {toast}
++        </div>
++      )}
++    </>
++  );
++}
++
++// ---------------------------------------------------------------- reveal
++
++function Reveal({ result, onClose, onAgain, canAgain }: { result: PullResult; onClose: () => void; onAgain: () => void; canAgain: boolean }) {
++  const [shown, setShown] = useState(0);
++  const total = result.cards.length;
++  const done = shown >= total;
++  const best = useMemo(() => RARITIES.find((r) => result.cards.some((c) => c.idea.rarity === r)) || 'COMMON', [result]);
++
++  useEffect(() => {
++    if (done) return;
++    const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
++    const t = setTimeout(() => setShown((s) => s + 1), reduce ? 0 : shown === 0 ? 450 : 220);
++    return () => clearTimeout(t);
++  }, [shown, done]);
++
++  useEffect(() => {
++    const onKey = (e: KeyboardEvent) => {
++      if (e.key === 'Escape') onClose();
++    };
++    window.addEventListener('keydown', onKey);
++    return () => window.removeEventListener('keydown', onKey);
++  }, [onClose]);
++
++  return (
++    <div className={`gacha-reveal best-${best.toLowerCase()}`} role="dialog" aria-modal="true" aria-label="Your pull">
++      {done && best === 'LEGENDARY' && <Confetti />}
++      <div className="reveal-inner">
++        <div className="row between">
++          <h2 style={{ margin: 0, color: 'var(--white)' }}>{done ? (best === 'LEGENDARY' ? '✨ LEGENDARY PULL ✨' : 'Your ideas') : 'Pulling…'}</h2>
++          {!done && (
++            <button className="btn secondary small" onClick={() => setShown(total)}>
++              Reveal all
++            </button>
++          )}
++        </div>
++        <div className="gcards">
++          {result.cards.map((c, i) => (
++            <div key={i} className={`gcard r-${c.idea.rarity.toLowerCase()}${i < shown ? ' flipped' : ''}`}>
++              <div className="gcard-inner">
++                <div className="gcard-back" aria-hidden>
++                  <span>TPX</span>
++                </div>
++                <div className="gcard-face" aria-hidden={i >= shown}>
++                  <div className="row between">
++                    <span className="stars-r">{'★'.repeat(c.idea.stars)}</span>
++                    {c.isNew ? <span className="new-tag">NEW</span> : <span className="dupe-tag">+{c.gemRefund}💎</span>}
++                  </div>
++                  <div className="gicon">{c.idea.icon}</div>
++                  <div className="gtitle">{c.idea.title}</div>
++                  <div className="gkind">{KIND_LABEL[c.idea.kind]}</div>
++                  <div className="gdesc">{c.idea.description}</div>
++                  <div className="gxp">
++                    +{c.xp} XP{c.pity ? ' · guaranteed' : ''}
++                  </div>
++                  {c.idea.url && (
++                    <a className="glink" href={c.idea.url} target="_blank" rel="noreferrer">
++                      Open ↗
++                    </a>
++                  )}
++                </div>
++              </div>
++            </div>
++          ))}
++        </div>
++        {done && (
++          <div className="reveal-summary">
++            <div className="row wrap">
++              <span className="chip">⭐ +{n(result.xpGained)} XP</span>
++              {result.gemsRefunded > 0 && <span className="chip">💎 +{n(result.gemsRefunded)} from duplicates</span>}
++              <span className="chip">{result.cards.filter((c) => c.isNew).length} new</span>
++              {result.badgesUnlocked.map((b) => (
++                <span key={b} className="chip mint">
++                  🏅 {b}
++                </span>
++              ))}
++            </div>
++            <div className="row">
++              <button className="btn secondary" onClick={onClose}>
++                Done
++              </button>
++              <button className="btn blue" onClick={onAgain} disabled={!canAgain} title={canAgain ? '' : 'Not enough gems'}>
++                Pull again
++              </button>
++            </div>
++          </div>
++        )}
++      </div>
++    </div>
++  );
++}
++
++function Confetti() {
++  const bits = useMemo(
++    () =>
++      Array.from({ length: 60 }, (_, i) => ({
++        left: Math.random() * 100,
++        delay: Math.random() * 0.8,
++        duration: 2 + Math.random() * 2,
++        colour: ['#c8e9ff', '#ffcfca', '#cafce5', '#e7d2ff', '#f5c542'][i % 5],
++      })),
++    [],
++  );
++  return (
++    <>
++      {bits.map((b, i) => (
++        <span key={i} className="confetti" style={{ left: `${b.left}%`, background: b.colour, animationDelay: `${b.delay}s`, animationDuration: `${b.duration}s` }} />
++      ))}
++    </>
++  );
++}
++
++// ---------------------------------------------------------------- shop
++
++type Runner = <T>(key: string, fn: () => Promise<T>, after?: (r: T) => void) => Promise<void>;
++
++function Shop({
++  data,
++  busy,
++  run,
++  setWallet,
++  setToast,
++  refresh,
++}: {
++  data: GachaOverview;
++  busy: string | null;
++  run: Runner;
++  setWallet: (w: GachaWallet) => void;
++  setToast: (t: string) => void;
++  refresh: () => Promise<void>;
++}) {
++  const w = data.wallet;
++  const [xp, setXp] = useState(Math.min(100, w.xp));
++
++  const buy = (code: string, name: string) =>
++    run(`buy:${code}`, () => post<GachaWallet>(`/gacha/shop/${code}`), (nw) => {
++      const levelled = nw.vipLevel > w.vipLevel;
++      setWallet(nw);
++      setToast(levelled ? `👑 Welcome to VIP ${nw.vipLevel}: ${nw.vipTitle}! +${nw.xpBonusPercent}% XP on every pull.` : `${name} added. Thank you for your (pretend) money!`);
++    });
++
++  const exchange = () =>
++    run('exchange', () => post<GachaWallet>('/gacha/exchange', { xp }), (nw) => {
++      setWallet(nw);
++      setToast(`Traded ${n(xp)} XP for ${n(xp * nw.gemsPerXp)} 💎`);
++      refresh();
++    });
++
++  return (
++    <>
++      <div className="grid grid-4">
++        {data.shop.map((p, i) => (
++          <div key={p.code} className={`card pack pack-${i}`}>
++            {i === data.shop.length - 1 && <span className="chip dark best-value">BEST VALUE</span>}
++            <div className="pack-gems">💎 {n(p.gems)}</div>
++            <h3>{p.name}</h3>
++            <p className="small">{p.tagline}</p>
++            <button className="btn" style={{ width: '100%' }} onClick={() => buy(p.code, p.name)} disabled={busy !== null}>
++              {busy === `buy:${p.code}` ? 'Processing…' : `${gbp(p.pricePence)} (pretend)`}
++            </button>
++          </div>
++        ))}
++      </div>
++
++      <div className="grid grid-2 mt">
++        <section className="card">
++          <h3>Trade XP for gems</h3>
++          <p className="small muted">
++            1 XP = {w.gemsPerXp} 💎. You'll drop down the leaderboard, but think of the pulls.
++          </p>
++          <div className="row">
++            <input
++              type="number"
++              min={data.minXpExchange}
++              max={w.xp}
++              step={10}
++              value={xp}
++              onChange={(e) => setXp(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
++              aria-label="XP to trade"
++              className="xp-input"
++            />
++            <button className="btn secondary" onClick={exchange} disabled={busy !== null || xp < data.minXpExchange || xp > w.xp}>
++              Trade for {n(xp * w.gemsPerXp)} 💎
++            </button>
++          </div>
++          <div className="hint">You have {n(w.xp)} XP. Minimum trade is {data.minXpExchange} XP.</div>
++        </section>
++
++        <section className="card">
++          <h3>VIP tiers</h3>
++          <p className="small muted">
++            Spend (pretend) money, get more XP from every pull. Totally fair.
++            {w.nextVipTitle && w.nextVipPence != null && (
++              <>
++                {' '}
++                {gbp(w.nextVipPence - w.fakeSpendPence)} more to reach <strong>{w.nextVipTitle}</strong>.
++              </>
++            )}
++          </p>
++          <ol className="vip-ladder">
++            {data.vipTiers.map((t) => (
++              <li key={t.level} className={t.level === w.vipLevel ? 'current' : t.level < w.vipLevel ? 'passed' : ''}>
++                <span>
++                  VIP {t.level} · {t.title}
++                </span>
++                <span className="xs">
++                  {t.minSpendPence ? gbp(t.minSpendPence) : 'Free'} · +{t.level * 10}% XP
++                </span>
++              </li>
++            ))}
++          </ol>
++        </section>
++      </div>
++    </>
++  );
++}
++
++// ---------------------------------------------------------------- collection
++
++function Collection({ reload }: { reload: number }) {
++  const [data, setData] = useState<GachaCollection | null>(null);
++  const [rarity, setRarity] = useState<Rarity | 'ALL'>('ALL');
++  const [kind, setKind] = useState<IdeaKind | 'ALL'>('ALL');
++  const [ownedOnly, setOwnedOnly] = useState(false);
++  const [open, setOpen] = useState<CollectionItem | null>(null);
++
++  const load = useCallback(() => get<GachaCollection>('/gacha/collection').then(setData), []);
++  useEffect(() => {
++    load();
++  }, [load, reload]);
++
++  if (!data) return <Loading />;
++  const items = data.items.filter((i) => (rarity === 'ALL' || i.rarity === rarity) && (kind === 'ALL' || i.kind === kind) && (!ownedOnly || i.owned));
++
++  return (
++    <>
++      <div className="grid grid-4">
++        {data.byRarity
++          .slice()
++          .reverse()
++          .map((r) => (
++            <div key={r.rarity} className={`card flat stat r-${r.rarity.toLowerCase()} rarity-stat`}>
++              <span className="num">
++                {r.owned}/{r.total}
++              </span>
++              <span className="lbl">{r.label}</span>
++            </div>
++          ))}
++      </div>
++      <div className="row wrap mt">
++        <div className="seg" aria-label="Rarity">
++          {(['ALL', ...RARITIES] as const).map((r) => (
++            <button key={r} className={rarity === r ? 'active' : ''} onClick={() => setRarity(r)}>
++              {r === 'ALL' ? 'All' : RARITY_LABEL[r]}
++            </button>
++          ))}
++        </div>
++        <div className="seg" aria-label="Kind">
++          {(['ALL', 'ACTION', 'PROJECT', 'RESOURCE'] as const).map((k) => (
++            <button key={k} className={kind === k ? 'active' : ''} onClick={() => setKind(k)}>
++              {KIND_FILTER[k]}
++            </button>
++          ))}
++        </div>
++        <label className="row small" style={{ margin: 0, fontWeight: 600 }}>
++          <input type="checkbox" checked={ownedOnly} onChange={(e) => setOwnedOnly(e.target.checked)} /> Owned only
++        </label>
++        <span className="small muted">
++          {data.owned} of {data.poolSize} collected
++        </span>
++      </div>
++      {items.length === 0 ? (
++        <div className="empty">Nothing here yet. Go pull something!</div>
++      ) : (
++        <div className="mini-cards mt">
++          {items.map((i) =>
++            i.owned ? (
++              <button key={i.id} className={`mini-card r-${i.rarity.toLowerCase()}`} onClick={() => setOpen(i)}>
++                <span className="gicon">{i.icon}</span>
++                <span className="mtitle">{i.title}</span>
++                <span className="xs">
++                  {'★'.repeat(i.stars)} {i.copies > 1 ? `×${i.copies}` : ''}
++                </span>
++              </button>
++            ) : (
++              <div key={i.id} className={`mini-card locked r-${i.rarity.toLowerCase()}`} title={`Locked ${RARITY_LABEL[i.rarity]} ${KIND_LABEL[i.kind].toLowerCase()}`}>
++                <span className="gicon">?</span>
++                <span className="mtitle">???</span>
++                <span className="xs">{'★'.repeat(i.stars)}</span>
++              </div>
++            ),
++          )}
++        </div>
++      )}
++      {open && (
++        <div className="modal-backdrop" onClick={() => setOpen(null)}>
++          <div className={`modal idea-modal r-${open.rarity.toLowerCase()}`} role="dialog" aria-modal="true" aria-label={open.title} onClick={(e) => e.stopPropagation()}>
++            <div className="row between">
++              <span className="chip">
++                {'★'.repeat(open.stars)} {RARITY_LABEL[open.rarity]} · {KIND_LABEL[open.kind]}
++              </span>
++              <button className="btn ghost" onClick={() => setOpen(null)} aria-label="Close">
++                ✕
++              </button>
++            </div>
++            <div className="gicon big">{open.icon}</div>
++            <h2>{open.title}</h2>
++            <p>{open.description}</p>
++            <p className="xs muted">
++              First pulled {ukDate(open.firstPulledAt)} · owned ×{open.copies}
++            </p>
++            {open.url && (
++              <a className="btn blue" href={open.url} target="_blank" rel="noreferrer">
++                Open resource ↗
++              </a>
++            )}
++          </div>
++        </div>
++      )}
++    </>
++  );
++}
++
++// ---------------------------------------------------------------- history
++
++function History({ reload }: { reload: number }) {
++  const [rows, setRows] = useState<GachaHistoryBatch[] | null>(null);
++  useEffect(() => {
++    get<GachaHistoryBatch[]>('/gacha/history').then(setRows);
++  }, [reload]);
++  if (!rows) return <Loading />;
++  if (!rows.length) return <div className="empty">No pulls yet. Your first 10-pull is on us.</div>;
++  return (
++    <div className="stack">
++      {rows.map((b) => (
++        <div key={b.batchId} className="card flat">
++          <div className="row between">
++            <strong>{b.banner.charAt(0) + b.banner.slice(1).toLowerCase()} 10-pull</strong>
++            <span className="small muted">
++              {timeAgo(b.createdAt)} · +{b.xpGained} XP
++            </span>
++          </div>
++          <div className="row wrap mt">
++            {b.cards.map((c, i) => (
++              <span key={i} className={`chip hist r-${c.rarity.toLowerCase()}`} title={RARITY_LABEL[c.rarity]}>
++                {c.icon} {c.title}
++                {c.duplicate ? ' (dupe)' : ''}
++              </span>
++            ))}
++          </div>
++        </div>
++      ))}
++    </div>
++  );
++}
++
++// ---------------------------------------------------------------- odds
++
++function Odds({ data }: { data: GachaOverview }) {
++  const w = data.wallet;
++  return (
++    <div className="grid grid-2">
++      <section className="card">
++        <h3>Odds per pull</h3>
++        <table className="odds-table">
++          <thead>
++            <tr>
++              <th>Rarity</th>
++              {data.banners.map((b) => (
++                <th key={b.code}>{b.code.charAt(0) + b.code.slice(1).toLowerCase()}</th>
++              ))}
++            </tr>
++          </thead>
++          <tbody>
++            {RARITIES.map((r) => (
++              <tr key={r}>
++                <td>
++                  <span className={`chip r-${r.toLowerCase()}`}>{RARITY_LABEL[r]}</span>
++                </td>
++                {data.banners.map((b) => (
++                  <td key={b.code}>{b.odds[r]}%</td>
++                ))}
++              </tr>
++            ))}
++          </tbody>
++        </table>
++      </section>
++      <section className="card">
++        <h3>The rules</h3>
++        <ul className="small">
++          <li>Every 10-pull includes at least one Rare or better.</li>
++          <li>
++            Pity: if you go {w.pityThreshold - 1} pulls without a Legendary, the next one is guaranteed.
++          </li>
++          <li>Whale pulls always include a Legendary.</li>
++          <li>XP per pull: Common 3, Rare 8, Epic 25, Legendary 100, plus your VIP bonus (currently +{w.xpBonusPercent}%).</li>
++          <li>Duplicates refund gems: Common 10, Rare 25, Epic 60, Legendary 200.</li>
++          <li>
++            Free gems: {data.wallet.dailyGems} every day, and new players start with enough for one 10-pull.
++          </li>
++          <li>Training resources come from the training library. Their rarity follows their level.</li>
++          <li>No real money is ever taken. Please don't try to expense your gems.</li>
++        </ul>
++      </section>
++    </div>
++  );
++}
+diff --git a/frontend/app/globals.css b/frontend/app/globals.css
+index 2675592..b1af8d1 100755
+--- a/frontend/app/globals.css
++++ b/frontend/app/globals.css
+@@ -301,3 +301,116 @@ table.board tr.me td { background: var(--pastel-blue); }
+ @media (prefers-reduced-motion: reduce) {
+   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+ }
++
++/* ---------- idea gacha ---------- */
++:root {
++  --r-common: #eeeeea;
++  --r-common-edge: #9a9a94;
++  --r-rare: var(--pastel-blue);
++  --r-rare-edge: var(--blue);
++  --r-epic: var(--pastel-lilac);
++  --r-epic-edge: #6b2fc0;
++  --r-legendary: linear-gradient(135deg, #ffcfca 0%, #e7d2ff 35%, #c8e9ff 65%, #cafce5 100%);
++  --r-legendary-edge: #c8961a;
++}
++.gem-chip { background: var(--black); color: var(--white); font-size: 0.9rem; padding: 0.3rem 0.8rem; }
++.chip.vip { border: 1.5px solid var(--black); background: var(--white); }
++.chip.vip-3, .chip.vip-4, .chip.vip-5 { background: var(--r-legendary); border-color: var(--r-legendary-edge); }
++.linkish { background: none; border: none; padding: 0; color: var(--blue); text-decoration: underline; cursor: pointer; font-weight: 600; }
++
++.banner { display: flex; flex-direction: column; }
++.banner > p { flex: 1; }
++.banner.whale { background: var(--r-legendary); border: 2px solid var(--r-legendary-edge); }
++.banner.whale h2 { color: var(--black); }
++.odds-strip { display: flex; flex-wrap: wrap; gap: 0.3rem; }
++.odds { font-size: 0.72rem; font-weight: 700; padding: 0.1rem 0.45rem; border-radius: 999px; background: var(--white); border: 1.5px solid var(--grey-300); }
++.odds.r-rare { border-color: var(--r-rare-edge); }
++.odds.r-epic { border-color: var(--r-epic-edge); }
++.odds.r-legendary { border-color: var(--r-legendary-edge); }
++.bar.pity > span { background: linear-gradient(90deg, var(--blue), var(--r-epic-edge), var(--r-legendary-edge)); }
++
++/* rarity colouring shared by chips, stats and mini cards */
++.chip.r-common, .mini-card.r-common, .rarity-stat.r-common, .idea-modal.r-common { background: var(--r-common); }
++.chip.r-rare, .mini-card.r-rare, .rarity-stat.r-rare, .idea-modal.r-rare { background: var(--r-rare); }
++.chip.r-epic, .mini-card.r-epic, .rarity-stat.r-epic, .idea-modal.r-epic { background: var(--r-epic); }
++.chip.r-legendary, .mini-card.r-legendary, .rarity-stat.r-legendary, .idea-modal.r-legendary { background: var(--r-legendary); }
++.chip.r-legendary, .chip.hist.r-legendary { box-shadow: 0 0 0 1.5px var(--r-legendary-edge); }
++.rarity-stat { border-width: 2px; }
++.rarity-stat.r-rare { border-color: var(--r-rare-edge); }
++.rarity-stat.r-epic { border-color: var(--r-epic-edge); }
++.rarity-stat.r-legendary { border-color: var(--r-legendary-edge); }
++
++/* reveal overlay */
++.gacha-reveal { position: fixed; inset: 0; z-index: 110; background: radial-gradient(circle at 50% 30%, #1d3f78 0%, #0b1730 70%); overflow-y: auto; padding: 1.5rem 1rem; animation: pop 0.25s ease-out; }
++.gacha-reveal.best-legendary { background: radial-gradient(circle at 50% 30%, #6a4a12 0%, #1a1206 75%); }
++.gacha-reveal.best-epic { background: radial-gradient(circle at 50% 30%, #3f1f73 0%, #120a24 75%); }
++.reveal-inner { max-width: 1100px; margin: 0 auto; }
++.gcards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.8rem; margin: 1.25rem 0; }
++@media (max-width: 900px) { .gcards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
++.gcard { perspective: 1000px; min-height: 290px; }
++.gcard-inner { position: relative; width: 100%; height: 100%; min-height: 290px; transition: transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1); transform-style: preserve-3d; }
++.gcard.flipped .gcard-inner { transform: rotateY(180deg); }
++.gcard-back, .gcard-face { position: absolute; inset: 0; border-radius: var(--radius); backface-visibility: hidden; -webkit-backface-visibility: hidden; }
++.gcard-back { display: flex; align-items: center; justify-content: center; background: repeating-linear-gradient(45deg, #0252bb 0 12px, #0a47a0 12px 24px); border: 3px solid var(--white); }
++.gcard-back span { font-family: var(--font-head); font-weight: 700; font-size: 1.6rem; color: var(--white); letter-spacing: 0.08em; }
++.gcard-face { transform: rotateY(180deg); padding: 0.8rem; display: flex; flex-direction: column; gap: 0.3rem; border: 3px solid var(--r-common-edge); overflow: hidden; color: var(--black); }
++.gcard.r-common .gcard-face { background: var(--r-common); }
++.gcard.r-rare .gcard-face { background: var(--r-rare); border-color: var(--r-rare-edge); }
++.gcard.r-epic .gcard-face { background: var(--r-epic); border-color: var(--r-epic-edge); box-shadow: 0 0 18px rgba(107, 47, 192, 0.6); }
++.gcard.r-legendary .gcard-face { background: var(--r-legendary); border-color: var(--r-legendary-edge); box-shadow: 0 0 28px rgba(245, 197, 66, 0.9); }
++.gcard.r-legendary.flipped .gcard-face { animation: shimmer 1.6s ease-in-out infinite alternate; }
++@keyframes shimmer { from { box-shadow: 0 0 14px rgba(245, 197, 66, 0.6); } to { box-shadow: 0 0 36px rgba(245, 197, 66, 1); } }
++.stars-r { color: var(--black); letter-spacing: 0.05em; font-size: 0.85rem; }
++.new-tag { background: var(--black); color: var(--white); font-size: 0.65rem; font-weight: 700; padding: 0.05rem 0.4rem; border-radius: 999px; }
++.dupe-tag { font-size: 0.7rem; font-weight: 700; }
++.gicon { font-size: 2rem; line-height: 1.1; }
++.gicon.big { font-size: 3rem; margin: 0.5rem 0; }
++.gtitle { font-family: var(--font-head); font-weight: 700; text-transform: uppercase; line-height: 1.1; font-size: 0.98rem; }
++.gkind { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.7; }
++.gdesc { font-size: 0.78rem; line-height: 1.35; flex: 1; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; }
++.gxp { font-size: 0.75rem; font-weight: 700; }
++.glink { font-size: 0.75rem; font-weight: 700; color: var(--black); }
++.reveal-summary { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; background: var(--white); border-radius: var(--radius); padding: 0.9rem 1rem; animation: pop 0.3s ease-out; }
++
++/* shop */
++.pack { position: relative; text-align: center; display: flex; flex-direction: column; }
++.pack > p { flex: 1; }
++.pack-gems { font-family: var(--font-head); font-weight: 700; font-size: 1.8rem; margin: 0.4rem 0; }
++.pack-0 { background: var(--pastel-mint); }
++.pack-1 { background: var(--pastel-blue); }
++.pack-2 { background: var(--pastel-lilac); }
++.pack-3 { background: var(--r-legendary); border: 2px solid var(--r-legendary-edge); }
++.pack h3 { color: var(--black); }
++.best-value { position: absolute; top: -0.6rem; left: 50%; transform: translateX(-50%); }
++.xp-input { width: 8rem !important; padding: 0.5rem 0.6rem; border: 2px solid var(--grey-300); border-radius: var(--radius-sm); }
++.vip-ladder { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.3rem; }
++.vip-ladder li { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.7rem; border-radius: var(--radius-sm); background: var(--grey-50); font-weight: 600; font-size: 0.9rem; }
++.vip-ladder li.passed { background: var(--pastel-mint); }
++.vip-ladder li.current { background: var(--black); color: var(--white); }
++
++/* collection */
++.mini-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.6rem; }
++.mini-card { display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-start; text-align: left; padding: 0.7rem; border-radius: var(--radius-sm); border: 2px solid var(--r-common-edge); cursor: pointer; font: inherit; color: var(--black); min-height: 110px; }
++.mini-card.r-rare { border-color: var(--r-rare-edge); }
++.mini-card.r-epic { border-color: var(--r-epic-edge); }
++.mini-card.r-legendary { border-color: var(--r-legendary-edge); }
++.mini-card .gicon { font-size: 1.5rem; }
++.mini-card .mtitle { font-weight: 700; font-size: 0.85rem; line-height: 1.2; }
++.mini-card.locked { cursor: default; opacity: 0.45; filter: grayscale(0.6); }
++.mini-card.locked .gicon { font-family: var(--font-head); color: var(--grey-600); }
++button.mini-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
++.idea-modal { border: 3px solid var(--r-common-edge); }
++.idea-modal.r-rare { border-color: var(--r-rare-edge); }
++.idea-modal.r-epic { border-color: var(--r-epic-edge); }
++.idea-modal.r-legendary { border-color: var(--r-legendary-edge); }
++.idea-modal h2 { color: var(--black); }
++
++.odds-table { width: 100%; border-collapse: collapse; }
++.odds-table th, .odds-table td { text-align: left; padding: 0.45rem 0.4rem; border-bottom: 1px solid var(--grey-100); font-size: 0.9rem; }
++.chip.hist { font-weight: 600; }
++.gacha-toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); z-index: 130; background: var(--black); color: var(--white); padding: 0.7rem 1.1rem; border-radius: 999px; font-weight: 600; box-shadow: var(--shadow); animation: pop 0.25s ease-out; max-width: calc(100vw - 2rem); }
++
++@media (prefers-reduced-motion: reduce) {
++  .gcard-inner { transition: none; }
++  .gcard.r-legendary.flipped .gcard-face, .gacha-reveal, .reveal-summary, .gacha-toast { animation: none; }
++}
+diff --git a/frontend/components/AppShell.tsx b/frontend/components/AppShell.tsx
+index 687190f..f5293fc 100755
+--- a/frontend/components/AppShell.tsx
++++ b/frontend/components/AppShell.tsx
+@@ -20,6 +20,8 @@ const NAV = [
+   { href: '/community', label: 'Community', ico: '💬' },
+   { href: '/leaderboard', label: 'Leaderboard', ico: '🏆' },
+   { href: '/achievements', label: 'Badges', ico: '🏅' },
++  { section: 'Play' },
++  { href: '/gacha', label: 'Idea gacha', ico: '🎰' },
+ ] as const;
+ 
+ export function Brand() {
+diff --git a/frontend/lib/types.ts b/frontend/lib/types.ts
+index 812ae7f..6ad7fb3 100755
+--- a/frontend/lib/types.ts
++++ b/frontend/lib/types.ts
+@@ -207,3 +207,101 @@ export type RoleDetail = {
+   practice: string;
+   skills: { skill: { id: string; name: string; definition?: string; levels: Record<string, string> }; expected: Record<string, string | null> }[];
+ };
++
++// ---------- Idea gacha ----------
++export type Rarity = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
++export type IdeaKind = 'ACTION' | 'PROJECT' | 'RESOURCE';
++
++export type GachaWallet = {
++  gems: number;
++  xp: number;
++  pityCount: number;
++  pityThreshold: number;
++  dailyAvailable: boolean;
++  dailyGems: number;
++  vipLevel: number;
++  vipTitle: string;
++  xpBonusPercent: number;
++  fakeSpendPence: number;
++  nextVipTitle?: string;
++  nextVipPence?: number;
++  totalPulls: number;
++  gemsPerXp: number;
++};
++
++export type GachaBanner = {
++  code: 'STANDARD' | 'BOOSTED' | 'WHALE';
++  name: string;
++  cost: number;
++  description: string;
++  guaranteedLegendary: boolean;
++  odds: Record<Rarity, number>;
++};
++
++export type GemPack = { code: string; name: string; pricePence: number; gems: number; tagline: string };
++export type VipTier = { level: number; title: string; minSpendPence: number };
++
++export type GachaOverview = {
++  wallet: GachaWallet;
++  banners: GachaBanner[];
++  shop: GemPack[];
++  vipTiers: VipTier[];
++  poolSize: number;
++  pullsPerBatch: number;
++  minXpExchange: number;
++};
++
++export type GachaIdea = {
++  id: string;
++  kind: IdeaKind;
++  rarity: Rarity;
++  rarityLabel: string;
++  stars: number;
++  title: string;
++  description: string;
++  icon: string;
++  url?: string;
++  resourceId?: string;
++};
++
++export type PulledCard = { idea: GachaIdea; isNew: boolean; xp: number; gemRefund: number; pity: boolean };
++
++export type PullResult = {
++  batchId: string;
++  banner: string;
++  cards: PulledCard[];
++  gemsSpent: number;
++  gemsRefunded: number;
++  xpGained: number;
++  badgesUnlocked: string[];
++  wallet: GachaWallet;
++};
++
++export type CollectionItem = {
++  id: string;
++  kind: IdeaKind;
++  rarity: Rarity;
++  stars: number;
++  owned: boolean;
++  title?: string;
++  description?: string;
++  icon?: string;
++  url?: string;
++  copies: number;
++  firstPulledAt?: string;
++};
++
++export type GachaCollection = {
++  poolSize: number;
++  owned: number;
++  byRarity: { rarity: Rarity; label: string; owned: number; total: number }[];
++  items: CollectionItem[];
++};
++
++export type GachaHistoryBatch = {
++  batchId: string;
++  banner: string;
++  createdAt: string;
++  xpGained: number;
++  cards: { ideaId: string; title: string; icon: string; rarity: Rarity; duplicate: boolean }[];
++};
+diff --git a/tools/mock-api/gacha.js b/tools/mock-api/gacha.js
+new file mode 100644
+index 0000000..f935330
+--- /dev/null
++++ b/tools/mock-api/gacha.js
+@@ -0,0 +1,83 @@
++/* In-memory mock of /api/gacha, mirroring GachaService in the Spring Boot backend. */
++const R = { COMMON: [1, 600, 3, 10, 'Common'], RARE: [2, 280, 8, 25, 'Rare'], EPIC: [3, 100, 25, 60, 'Epic'], LEGENDARY: [4, 20, 100, 200, 'Legendary'] };
++const RARITIES = Object.keys(R);
++const BANNERS = [
++  ['STANDARD', 'Standard 10-pull', 1000, 1, false, 'Ten ideas at standard odds. At least one Rare or better.'],
++  ['BOOSTED', 'Boosted 10-pull', 1500, 3, false, 'Triple Epic and Legendary odds. For people who want it more.'],
++  ['WHALE', 'Whale 10-pull', 5000, 3, true, 'Boosted odds plus a guaranteed Legendary. Money can buy happiness.'],
++];
++const SHOP = [
++  { code: 'pocket-change', name: 'Pocket change', pricePence: 99, gems: 300, tagline: 'Less than a coffee. Probably.' },
++  { code: 'consultants-coffer', name: "Consultant's coffer", pricePence: 999, gems: 3300, tagline: 'Billable to the client? (No.)' },
++  { code: 'partner-track', name: 'Partner track bundle', pricePence: 4999, gems: 18000, tagline: 'Skip the promotion panel.' },
++  { code: 'whale-of-a-time', name: 'Whale of a time', pricePence: 9999, gems: 40000, tagline: 'Best value! Unlocks VIP 4 instantly.' },
++];
++const VIP = [[0, 'Free-to-play', 0], [1, 'Minnow', 99], [2, 'Dolphin', 999], [3, 'Shark', 4999], [4, 'Whale', 9999], [5, 'Leviathan', 49999]].map(([level, title, minSpendPence]) => ({ level, title, minSpendPence }));
++const PITY = 50, DAILY = 300, GEMS_PER_XP = 5;
++const ICON = { BOOK: '📖', COURSE: '💻', EVENT: '🎟️', PROGRAMME: '🎓', ARTICLE: '📰' };
++const HAND = [
++  ['act:playback', 'ACTION', 'COMMON', '🔁', 'Play it back', 'Summarise what you heard in one sentence before responding.'],
++  ['act:five-whys', 'ACTION', 'COMMON', '❓', 'Five whys', "Ask 'why?' five times about one backlog request."],
++  ['act:lunch-learn', 'ACTION', 'RARE', '🥪', 'Host a lunch and learn', 'Run a 20-minute session on something you know well.'],
++  ['act:adr', 'ACTION', 'RARE', '🏛️', 'Write an ADR', 'Document one architectural decision on your project.'],
++  ['act:coach-someone', 'ACTION', 'EPIC', '🌱', 'Coach someone for a month', 'Offer four 30-minute coaching sessions to a junior colleague.'],
++  ['prj:skills-graph', 'PROJECT', 'EPIC', '🕸️', 'Skills graph', 'Visualise who knows what across the company.'],
++  ['prj:meeting-cost', 'PROJECT', 'COMMON', '⏱️', 'Meeting cost clock', 'Show the running cost of a meeting.'],
++  ['act:shadow-partner', 'ACTION', 'LEGENDARY', '👑', 'Shadow a partner on a pitch', 'Join a senior leader on a real client pitch.'],
++  ['act:conference-talk', 'ACTION', 'LEGENDARY', '🏟️', 'Speak at a conference', 'Submit a talk to an external conference.'],
++  ['prj:open-source', 'PROJECT', 'LEGENDARY', '🐙', 'Open-source a tool', 'Release something your team built as open source.'],
++].map(([id, kind, rarity, icon, title, description]) => ({ id, kind, rarity, icon, title, description }));
++
++module.exports = function gacha(CAT) {
++  const pool = [...HAND, ...CAT.map((r) => {
++    let rarity = r.level === 'Advanced' ? 'EPIC' : r.level === 'Intermediate' ? 'RARE' : 'COMMON';
++    if (r.type === 'EVENT' && rarity !== 'EPIC') rarity = RARITIES[RARITIES.indexOf(rarity) + 1];
++    return { id: 'res:' + r.id, kind: 'RESOURCE', rarity, icon: ICON[r.type] || '📚', title: r.title, description: r.description || '', url: r.url || undefined, resourceId: r.id };
++  })];
++  const wallets = {}; const pulls = [];
++  const today = () => new Date().toISOString().slice(0, 10);
++  const wal = (u) => (wallets[u.id] ||= { gems: 1000, pity: 0, total: 0, spend: 0, daily: null });
++  const vipFor = (s) => VIP.filter((t) => s >= t.minSpendPence).pop();
++  const weight = (b, r) => (r === 'EPIC' || r === 'LEGENDARY' ? R[r][1] * b[3] : R[r][1]);
++  const odds = (b) => { const t = RARITIES.reduce((a, r) => a + weight(b, r), 0); return Object.fromEntries(RARITIES.map((r) => [r, Math.round((weight(b, r) * 1000) / t) / 10])); };
++  const ideaView = (i) => ({ ...i, rarityLabel: R[i.rarity][4], stars: R[i.rarity][0] });
++  const view = (w, u) => { const v = vipFor(w.spend); const nx = VIP[v.level + 1]; return { gems: w.gems, xp: u.xp, pityCount: w.pity, pityThreshold: PITY, dailyAvailable: w.daily !== today(), dailyGems: DAILY, vipLevel: v.level, vipTitle: v.title, xpBonusPercent: v.level * 10, fakeSpendPence: w.spend, nextVipTitle: nx?.title, nextVipPence: nx?.minSpendPence, totalPulls: w.total, gemsPerXp: GEMS_PER_XP }; };
++
++  return function handle(p, m, body, me, send, res) {
++    if (!p.startsWith('/gacha')) return false;
++    const w = wal(me);
++    if (p === '/gacha' && m === 'GET') return send(res, 200, { wallet: view(w, me), banners: BANNERS.map((b) => ({ code: b[0], name: b[1], cost: b[2], description: b[5], guaranteedLegendary: b[4], odds: odds(b) })), shop: SHOP, vipTiers: VIP, poolSize: pool.length, pullsPerBatch: 10, minXpExchange: 10 }), true;
++    if (p === '/gacha/daily') { if (w.daily === today()) return send(res, 400, { message: "You've already claimed today's gems. Come back tomorrow (or visit the shop 👀)" }), true; w.daily = today(); w.gems += DAILY; return send(res, 200, view(w, me)), true; }
++    if (p === '/gacha/exchange') { const xp = +body.xp; if (!(xp >= 10) || xp > me.xp) return send(res, 400, { message: `You only have ${me.xp} XP` }), true; me.xp -= xp; w.gems += xp * GEMS_PER_XP; return send(res, 200, view(w, me)), true; }
++    let mm;
++    if ((mm = p.match(/^\/gacha\/shop\/(.+)$/))) { const pk = SHOP.find((s) => s.code === mm[1]); if (!pk) return send(res, 404, { message: 'Gem pack not found' }), true; w.gems += pk.gems; w.spend += pk.pricePence; return send(res, 200, view(w, me)), true; }
++    if (p === '/gacha/pull') {
++      const b = BANNERS.find((x) => x[0] === (body.banner || 'STANDARD')); if (!b) return send(res, 400, { message: 'Unknown banner. Use STANDARD, BOOSTED or WHALE' }), true;
++      if (w.gems < b[2]) return send(res, 400, { message: `Not enough gems: you need ${b[2]} 💎 and have ${w.gems}. Claim your daily gems, trade XP or visit the shop.` }), true;
++      w.gems -= b[2];
++      const total = RARITIES.reduce((a, r) => a + weight(b, r), 0);
++      const rs = []; const pity = []; let since = w.pity;
++      for (let i = 0; i < 10; i++) {
++        let r; if (since + 1 >= PITY) { r = 'LEGENDARY'; pity[i] = true; } else { let n = Math.floor(Math.random() * total); r = RARITIES.find((x) => (n -= weight(b, x)) < 0); }
++        rs.push(r); since = r === 'LEGENDARY' ? 0 : since + 1;
++      }
++      if (b[4] && !rs.includes('LEGENDARY')) { rs[9] = 'LEGENDARY'; pity[9] = true; since = 0; } else if (rs.every((r) => r === 'COMMON')) { rs[9] = 'RARE'; pity[9] = true; }
++      const bonus = vipFor(w.spend).level * 10; const owned = new Set(pulls.filter((x) => x.userId === me.id).map((x) => x.ideaId));
++      const batchId = 'b' + Math.random().toString(36).slice(2); let xpT = 0, refT = 0;
++      const cards = rs.map((r, i) => { const c = pool.filter((x) => x.rarity === r); const idea = c[Math.floor(Math.random() * c.length)]; const isNew = !owned.has(idea.id); owned.add(idea.id); const xp = Math.floor((R[r][2] * (100 + bonus)) / 100); const refund = isNew ? 0 : R[r][3]; xpT += xp; refT += refund; pulls.push({ userId: me.id, batchId, banner: b[0], ideaId: idea.id, rarity: r, xp, duplicate: !isNew, createdAt: new Date().toISOString() }); return { idea: ideaView(idea), isNew, xp, gemRefund: refund, pity: !!pity[i] }; });
++      w.gems += refT; w.pity = since; w.total += 10; me.xp += xpT;
++      return send(res, 200, { batchId, banner: b[0], cards, gemsSpent: b[2], gemsRefunded: refT, xpGained: xpT, badgesUnlocked: [], wallet: view(w, me) }), true;
++    }
++    if (p === '/gacha/collection') {
++      const mine = pulls.filter((x) => x.userId === me.id); const byId = {}; mine.forEach((x) => { (byId[x.ideaId] ||= { copies: 0, firstPulledAt: x.createdAt }).copies++; });
++      const items = pool.map((i) => (byId[i.id] ? { ...i, stars: R[i.rarity][0], owned: true, ...byId[i.id] } : { id: i.id, kind: i.kind, rarity: i.rarity, stars: R[i.rarity][0], owned: false, copies: 0 }))
++        .sort((a, b) => R[b.rarity][0] - R[a.rarity][0] || (b.owned - a.owned) || (a.title || '').localeCompare(b.title || ''));
++      return send(res, 200, { poolSize: pool.length, owned: Object.keys(byId).length, byRarity: RARITIES.map((r) => ({ rarity: r, label: R[r][4], owned: pool.filter((i) => i.rarity === r && byId[i.id]).length, total: pool.filter((i) => i.rarity === r).length })), items }), true;
++    }
++    if (p === '/gacha/history') {
++      const groups = {}; pulls.filter((x) => x.userId === me.id).forEach((x) => (groups[x.batchId] ||= []).push(x));
++      return send(res, 200, Object.entries(groups).reverse().slice(0, 10).map(([id, l]) => ({ batchId: id, banner: l[0].banner, createdAt: l[0].createdAt, xpGained: l.reduce((a, x) => a + x.xp, 0), cards: l.map((x) => { const i = pool.find((y) => y.id === x.ideaId); return { ideaId: x.ideaId, title: i.title, icon: i.icon, rarity: x.rarity, duplicate: x.duplicate }; }) }))), true;
++    }
++    return false;
++  };
++};
+diff --git a/tools/mock-api/server.js b/tools/mock-api/server.js
+index e488ec9..4c24d5a 100755
+--- a/tools/mock-api/server.js
++++ b/tools/mock-api/server.js
+@@ -9,6 +9,7 @@ const fs = require('fs');
+ const data = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, '../../backend/src/main/resources/data', f), 'utf8'));
+ const FW = data('framework.json');
+ const CAT = data('catalogue.json');
++const gacha = require('./gacha')(CAT);
+ const G = FW.grades.map((g) => g.code);
+ const L = FW.skillLevels;
+ 
+@@ -145,6 +146,7 @@ http.createServer((req, res) => {
+       if (p === '/achievements/unseen') { const list = (achievements[me.id] || []).filter((a) => !a.seen); list.forEach((a) => (a.seen = true)); return send(res, 200, list.map((e) => { const a = ACH.find((x) => x[0] === e.code); return { code: a[0], title: a[1], description: a[2], icon: a[3], category: a[4], bonusXp: a[5], earned: true, earnedAt: e.earnedAt }; })); }
+       if ((mm = p.match(/^\/achievements\/users\/(\d+)$/))) return send(res, 200, (achievements[+mm[1]] || []).map((e) => { const a = ACH.find((x) => x[0] === e.code); return { code: a[0], title: a[1], description: a[2], icon: a[3], category: a[4], bonusXp: a[5], earned: true }; }));
+       if (p === '/leaderboard') return send(res, 200, [...users].sort((a, b) => b.xp - a.xp).map((u, i) => ({ rank: i + 1, userId: u.id, displayName: u.displayName, avatarColor: u.avatarColor, roleName: role(u.roleId)?.name, xp: u.xp, periodXp: u.xp, level: levelFor(u.xp), levelTitle: levelInfo(u.xp).title, badges: (achievements[u.id] || []).length, streakDays: u.streakDays, isMe: u.id === me.id })));
++      if (gacha(p, m, body, me, send, res)) return;
+       send(res, 404, { message: 'Not found in mock: ' + m + ' ' + p });
+     } catch (e) { console.error(e); send(res, 500, { message: e.message }); }
+   });
